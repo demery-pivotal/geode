@@ -16,6 +16,9 @@ package org.apache.geode.internal.cache.tier.sockets.command;
 
 import java.io.IOException;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.internal.GetOp;
@@ -60,6 +63,7 @@ public class Get70 extends BaseCommand {
   public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
       final SecurityService securityService, long startparam) throws IOException {
     long start = startparam;
+    Timer.Sample timerSample = Timer.start();
     Part regionNamePart = null, keyPart = null, valuePart = null;
     String regionName = null;
     Object callbackArg = null, key = null;
@@ -121,7 +125,7 @@ public class Get70 extends BaseCommand {
       return;
     }
 
-    Region region = serverConnection.getCache().getRegion(regionName);
+    LocalRegion region = (LocalRegion) serverConnection.getCache().getRegion(regionName);
     if (region == null) {
       String reason = String.format("%s was not found during get request",
           regionName);
@@ -195,6 +199,13 @@ public class Get70 extends BaseCommand {
       long oldStart = start;
       start = DistributionStats.getStatTime();
       stats.incProcessGetTime(start - oldStart);
+      MeterRegistry meterRegistry = region.getCache().getMeterRegistry();
+      Timer timer = Timer.builder("SPRING.ONE.DEMO.cache.gets")
+          .tag("region", regionName)
+          .tag("data_policy", region.getDataPolicy().toString())
+          .tag("result", entry.keyNotPresent ? "miss" : "hit")
+          .register(meterRegistry);
+      timerSample.stop(timer);
 
       if (region instanceof PartitionedRegion) {
         PartitionedRegion pr = (PartitionedRegion) region;

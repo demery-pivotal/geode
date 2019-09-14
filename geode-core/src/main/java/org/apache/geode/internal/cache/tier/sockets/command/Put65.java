@@ -19,6 +19,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+
 import org.apache.geode.InvalidDeltaException;
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.DynamicRegionFactory;
@@ -68,6 +71,7 @@ public class Put65 extends BaseCommand {
   public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
       final SecurityService securityService, long p_start)
       throws IOException, InterruptedException {
+    Timer.Sample timerSample = Timer.start();
     long start = p_start;
     final CacheServerStats stats = serverConnection.getCacheServerStats();
 
@@ -465,7 +469,15 @@ public class Put65 extends BaseCommand {
     } finally {
       long oldStart = start;
       start = DistributionStats.getStatTime();
-      stats.incProcessPutTime(start - oldStart);
+      long processTime = start - oldStart;
+      stats.incProcessPutTime(processTime);
+
+      MeterRegistry meterRegistry = region.getCache().getMeterRegistry();
+      Timer timer = Timer.builder("SPRING.ONE.DEMO.cache.puts")
+          .tag("region", regionName)
+          .tag("data_policy", region.getDataPolicy().toString())
+          .register(meterRegistry);
+      timerSample.stop(timer);
     }
 
     // Increment statistics and write the reply
