@@ -65,7 +65,7 @@ class DockerizedJavaExecHandleBuilder extends JavaExecHandleBuilder {
 
     ExecHandle build() {
 
-        return new ExitCodeTolerantExecHandle(new DockerizedExecHandle(extension, getDisplayName(),
+        return new DockerizedExecHandle(extension, getDisplayName(),
                 getWorkingDir(),
                 'java',
                 allArguments,
@@ -77,9 +77,7 @@ class DockerizedJavaExecHandleBuilder extends JavaExecHandleBuilder {
                 timeoutMillis,
                 daemon,
                 executor,
-                buildCancellationToken),
-                workersSemaphore)
-
+                buildCancellationToken)
     }
 
     def timeoutMillis = Integer.MAX_VALUE
