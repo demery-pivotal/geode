@@ -16,9 +16,7 @@
 
 package com.pedjak.gradle.plugins.dockerizedtest
 
-import com.pedjak.gradle.plugins.dockerizedtest.DockerizedTestExtension
-import com.pedjak.gradle.plugins.dockerizedtest.ExitCodeTolerantExecHandle
-import com.pedjak.gradle.plugins.dockerizedtest.WorkerSemaphore
+
 import org.gradle.api.internal.file.FileCollectionFactory
 import org.gradle.api.internal.file.FileResolver
 import org.gradle.initialization.BuildCancellationToken

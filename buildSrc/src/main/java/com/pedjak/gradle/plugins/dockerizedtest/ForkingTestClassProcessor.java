@@ -28,6 +28,7 @@ import org.gradle.api.internal.tasks.testing.TestResultProcessor;
 import org.gradle.api.internal.tasks.testing.WorkerTestClassProcessorFactory;
 import org.gradle.api.internal.tasks.testing.worker.RemoteTestClassProcessor;
 import org.gradle.api.internal.tasks.testing.worker.TestEventSerializer;
+import org.gradle.api.internal.tasks.testing.worker.TestWorker;
 import org.gradle.internal.remote.ObjectConnection;
 import org.gradle.process.JavaForkOptions;
 import org.gradle.process.internal.worker.WorkerProcess;
@@ -91,12 +92,9 @@ public class ForkingTestClassProcessor implements TestClassProcessor {
   }
 
   // DHE: Differences from Gradle v5.5:
-  // - Creates a (custom) ForciblyStoppableTestWorker instead of a standard TestWorker
   // - Does not manage the lease.
   RemoteTestClassProcessor forkProcess() {
-    WorkerProcessBuilder
-        builder =
-        workerFactory.create(new ForciblyStoppableTestWorker(processorFactory));
+    WorkerProcessBuilder builder = workerFactory.create(new TestWorker(processorFactory));
     builder.setBaseName("Gradle Test Executor");
     builder.setImplementationClasspath(getTestWorkerImplementationClasspath());
     builder.applicationClasspath(classPath);
