@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import com.google.common.collect.ImmutableSet;
 import org.gradle.api.file.FileTree;
+import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.internal.tasks.testing.JvmTestExecutionSpec;
 import org.gradle.api.internal.tasks.testing.TestClassProcessor;
@@ -37,6 +38,7 @@ import org.gradle.internal.Factory;
 import org.gradle.internal.actor.ActorFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.time.Clock;
+import org.gradle.internal.work.WorkerLeaseRegistry;
 import org.gradle.process.internal.worker.WorkerProcessFactory;
 
 /**
@@ -44,25 +46,29 @@ import org.gradle.process.internal.worker.WorkerProcessFactory;
  * Modifications:
  * - Does not manage the worker lease.
  * - Omits some processors from the processor chain.
- *
  */
-public class TestExecuter
+public class DockerizedTestExecuter
     implements org.gradle.api.internal.tasks.testing.TestExecuter<JvmTestExecutionSpec> {
   private final WorkerProcessFactory workerFactory;
   private final ActorFactory actorFactory;
   private final ModuleRegistry moduleRegistry;
   private final BuildOperationExecutor buildOperationExecutor;
   private final Clock clock;
+  private final DocumentationRegistry documentationRegistry;
+  private final WorkerLeaseRegistry workerLeaseRegistry;
   private TestClassProcessor processor;
 
-  public TestExecuter(WorkerProcessFactory workerFactory, ActorFactory actorFactory,
-                      ModuleRegistry moduleRegistry, BuildOperationExecutor buildOperationExecutor,
-                      Clock clock) {
+  public DockerizedTestExecuter(WorkerProcessFactory workerFactory, ActorFactory actorFactory,
+      ModuleRegistry moduleRegistry, WorkerLeaseRegistry workerLeaseRegistry,
+      BuildOperationExecutor buildOperationExecutor, Clock clock,
+      DocumentationRegistry documentationRegistry) {
     this.workerFactory = workerFactory;
     this.actorFactory = actorFactory;
     this.moduleRegistry = moduleRegistry;
+    this.workerLeaseRegistry = workerLeaseRegistry;
     this.buildOperationExecutor = buildOperationExecutor;
     this.clock = clock;
+    this.documentationRegistry = documentationRegistry;
   }
 
   // DHE: Differences from Gradle v5.5
@@ -72,16 +78,20 @@ public class TestExecuter
   // - Does not honor max-workers.
   @Override
   public void execute(final JvmTestExecutionSpec testExecutionSpec,
-                      TestResultProcessor testResultProcessor) {
+      TestResultProcessor testResultProcessor) {
     final TestFramework testFramework = testExecutionSpec.getTestFramework();
     final WorkerTestClassProcessorFactory testInstanceFactory = testFramework.getProcessorFactory();
+    final WorkerLeaseRegistry.WorkerLease
+        currentWorkerLease =
+        workerLeaseRegistry.getCurrentWorkerLease();
     final Set<File> classpath = ImmutableSet.copyOf(testExecutionSpec.getClasspath());
     final Factory<TestClassProcessor> forkingProcessorFactory = new Factory<TestClassProcessor>() {
       @Override
       public TestClassProcessor create() {
-        return new ForkingTestClassProcessor(workerFactory, testInstanceFactory,
+        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory,
             testExecutionSpec.getJavaForkOptions(),
-            classpath, testFramework.getWorkerConfigurationAction(), moduleRegistry);
+            classpath, testFramework.getWorkerConfigurationAction(), moduleRegistry,
+            documentationRegistry);
       }
     };
     Factory<TestClassProcessor> reforkingProcessorFactory = new Factory<TestClassProcessor>() {

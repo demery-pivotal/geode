@@ -26,6 +26,7 @@ import org.gradle.api.Action
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.api.internal.file.DefaultFileCollectionFactory
 import org.gradle.api.tasks.testing.Test
 import org.gradle.initialization.DefaultBuildCancellationToken
@@ -41,6 +42,7 @@ import org.gradle.internal.remote.internal.IncomingConnector
 import org.gradle.internal.remote.internal.hub.MessageHubBackedObjectConnection
 import org.gradle.internal.remote.internal.inet.MultiChoiceAddress
 import org.gradle.internal.time.Clock
+import org.gradle.internal.work.WorkerLeaseRegistry
 import org.gradle.process.internal.JavaExecHandleFactory
 import org.gradle.process.internal.worker.DefaultWorkerProcessFactory
 
@@ -77,11 +79,13 @@ class DockerizedTestPlugin implements Plugin<Project> {
             def extension = test.extensions.docker
 
             if (extension?.image) {
-                // DHE: ????
                 workerSemaphore.applyTo(test.project)
+                def processBuilderFactory = newProcessBuilderFactory(project, extension, test.processBuilderFactory)
 
-                // DHE: Assign a custom test executer that launches test workers in Docker
-                test.testExecuter = new com.pedjak.gradle.plugins.dockerizedtest.TestExecuter(newProcessBuilderFactory(project, extension, test.processBuilderFactory), actorFactory, moduleRegistry, services.get(BuildOperationExecutor), services.get(Clock));
+                test.testExecuter = new DockerizedTestExecuter(processBuilderFactory, actorFactory,
+                        moduleRegistry, services.get(WorkerLeaseRegistry),
+                        services.get(BuildOperationExecutor), services.get(Clock),
+                        services.get(DocumentationRegistry));
 
                 // DHE: Launch a docker client if it isn't already assigned
                 if (!extension.client) {
