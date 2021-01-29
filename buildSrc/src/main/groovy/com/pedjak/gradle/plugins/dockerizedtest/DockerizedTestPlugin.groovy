@@ -59,7 +59,7 @@ class DockerizedTestPlugin implements Plugin<Project> {
     def currentUser
     def messagingServer
     // DHE: What is the purpose of this?
-    def memoryManager = new com.pedjak.gradle.plugins.dockerizedtest.NoMemoryManager()
+    def memoryManager = new NoMemoryManager()
 
     @Inject
     DockerizedTestPlugin(MessagingServer messagingServer) {
@@ -70,7 +70,6 @@ class DockerizedTestPlugin implements Plugin<Project> {
     void configureTest(project, test) {
         def ext = test.extensions.create("docker", DockerizedTestExtension, [] as Object[])
         def startParameter = project.gradle.startParameter
-        println("DHE: project.gradle.startParameter: $startParameter")
         ext.volumes = ["$startParameter.gradleUserHomeDir": "$startParameter.gradleUserHomeDir",
                        "$project.projectDir"              : "$project.projectDir"]
         ext.user = currentUser
@@ -79,8 +78,6 @@ class DockerizedTestPlugin implements Plugin<Project> {
 
             if (extension?.image) {
                 def processBuilderFactory = newProcessBuilderFactory(project, extension, test.processBuilderFactory)
-                println("DHE: getServices().get(StartParameter): ${getServices().get(StartParameter)}")
-
                 test.testExecuter = new DockerizedTestExecuter(
                         processBuilderFactory,
                         actorFactory,

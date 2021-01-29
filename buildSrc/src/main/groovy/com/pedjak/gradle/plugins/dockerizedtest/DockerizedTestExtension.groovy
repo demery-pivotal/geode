@@ -18,11 +18,6 @@ package com.pedjak.gradle.plugins.dockerizedtest
 
 import com.github.dockerjava.api.DockerClient
 
-/**
- * DHE:
- * - Configuration for a dockerized process.
- * - Instantiated by DockerizedTestPlugin for each appropriate test task
- */
 class DockerizedTestExtension {
 
     String image

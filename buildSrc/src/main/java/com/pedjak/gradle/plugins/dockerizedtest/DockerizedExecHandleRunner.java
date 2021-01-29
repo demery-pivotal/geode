@@ -28,8 +28,7 @@ import org.gradle.process.internal.StreamsHandler;
  * DHE: Copy of ExecHandleRunner v5.5, modified to call runContainer().
  */
 public class DockerizedExecHandleRunner implements Runnable {
-  private static final Logger
-      LOGGER =
+  private static final Logger LOGGER =
       Logging.getLogger(org.gradle.process.internal.ExecHandleRunner.class);
 
   private final DockerizedExecHandle execHandle;
