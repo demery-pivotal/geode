@@ -72,7 +72,6 @@ public class DockerizedTestExecuter
   }
 
   // DHE: Differences from Gradle v5.5
-  // - Does not manage the worker lease.
   // - Omits the PatternMatchTestClassProcessor and RunPreviousFailedFirstTestClassProcessor
   //   from the processor chain.
   // - Does not honor max-workers.
@@ -81,8 +80,7 @@ public class DockerizedTestExecuter
       TestResultProcessor testResultProcessor) {
     final TestFramework testFramework = testExecutionSpec.getTestFramework();
     final WorkerTestClassProcessorFactory testInstanceFactory = testFramework.getProcessorFactory();
-    final WorkerLeaseRegistry.WorkerLease
-        currentWorkerLease =
+    final WorkerLeaseRegistry.WorkerLease currentWorkerLease =
         workerLeaseRegistry.getCurrentWorkerLease();
     final Set<File> classpath = ImmutableSet.copyOf(testExecutionSpec.getClasspath());
     final Factory<TestClassProcessor> forkingProcessorFactory = new Factory<TestClassProcessor>() {

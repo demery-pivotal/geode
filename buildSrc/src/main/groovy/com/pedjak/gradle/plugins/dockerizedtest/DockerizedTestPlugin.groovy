@@ -53,13 +53,10 @@ import javax.inject.Inject
  * - Configures each test task to run each test worker in a separate Docker container.
  */
 class DockerizedTestPlugin implements Plugin<Project> {
-
     // DHE: minimum supported Gradle version. Perhaps we should also constrain the maximum version.
     def supportedVersion = '4.8'
     def currentUser
     def messagingServer
-    // DHE: Used by the ExitCodeTolerantExecHandle... for what?
-    def static workerSemaphore = new DefaultWorkerSemaphore()
     // DHE: What is the purpose of this?
     def memoryManager = new com.pedjak.gradle.plugins.dockerizedtest.NoMemoryManager()
 
@@ -79,7 +76,6 @@ class DockerizedTestPlugin implements Plugin<Project> {
             def extension = test.extensions.docker
 
             if (extension?.image) {
-                workerSemaphore.applyTo(test.project)
                 def processBuilderFactory = newProcessBuilderFactory(project, extension, test.processBuilderFactory)
 
                 test.testExecuter = new DockerizedTestExecuter(processBuilderFactory, actorFactory,
@@ -128,9 +124,8 @@ class DockerizedTestPlugin implements Plugin<Project> {
 
         // DHE: Create an exec handle factory that creates Dockerized exec handles
         def execHandleFactory = [newJavaExec: { ->
-            new DockerizedJavaExecHandleBuilder(
-              extension, project.fileResolver, defaultfilecollectionFactory,
-              executor, buildCancellationToken, workerSemaphore)
+            new DockerizedJavaExecHandleBuilder(extension, project.fileResolver,
+                    defaultfilecollectionFactory, executor, buildCancellationToken)
         }] as JavaExecHandleFactory
 
         // DHE: Return a default worker process factory that gets most details from the given

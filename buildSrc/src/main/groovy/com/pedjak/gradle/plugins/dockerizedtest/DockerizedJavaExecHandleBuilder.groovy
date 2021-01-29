@@ -33,21 +33,17 @@ class DockerizedJavaExecHandleBuilder extends JavaExecHandleBuilder {
     def buildCancellationToken
     private final DockerizedTestExtension extension
 
-    private final WorkerSemaphore workersSemaphore
-
     DockerizedJavaExecHandleBuilder(DockerizedTestExtension extension,
                                     FileResolver fileResolver,
                                     FileCollectionFactory fileCollectionFactory,
                                     Executor executor,
-                                    BuildCancellationToken buildCancellationToken,
-                                    WorkerSemaphore workersSemaphore) {
+                                    BuildCancellationToken buildCancellationToken) {
         // DHE: v6.8 JavaExecHandleBuilder constructor has multiple additional parameters.
         super(fileResolver, fileCollectionFactory, executor, buildCancellationToken)
         this.fileCollectionFactory = fileCollectionFactory
         this.extension = extension
         this.executor = executor
         this.buildCancellationToken = buildCancellationToken
-        this.workersSemaphore = workersSemaphore
     }
 
     def StreamsHandler getStreamsHandler() {
