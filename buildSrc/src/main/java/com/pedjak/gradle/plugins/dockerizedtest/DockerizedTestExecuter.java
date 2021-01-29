@@ -16,24 +16,27 @@
 
 package com.pedjak.gradle.plugins.dockerizedtest;
 
-import java.io.File;
-import java.util.Set;
-import java.util.UUID;
-
 import com.google.common.collect.ImmutableSet;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.internal.tasks.testing.JvmTestExecutionSpec;
 import org.gradle.api.internal.tasks.testing.TestClassProcessor;
+import org.gradle.api.internal.tasks.testing.TestExecuter;
 import org.gradle.api.internal.tasks.testing.TestFramework;
 import org.gradle.api.internal.tasks.testing.TestResultProcessor;
 import org.gradle.api.internal.tasks.testing.WorkerTestClassProcessorFactory;
 import org.gradle.api.internal.tasks.testing.detection.DefaultTestClassScanner;
 import org.gradle.api.internal.tasks.testing.detection.TestFrameworkDetector;
+import org.gradle.api.internal.tasks.testing.filter.DefaultTestFilter;
 import org.gradle.api.internal.tasks.testing.processors.MaxNParallelTestClassProcessor;
+import org.gradle.api.internal.tasks.testing.processors.PatternMatchTestClassProcessor;
 import org.gradle.api.internal.tasks.testing.processors.RestartEveryNTestClassProcessor;
+import org.gradle.api.internal.tasks.testing.processors.RunPreviousFailedFirstTestClassProcessor;
 import org.gradle.api.internal.tasks.testing.processors.TestMainAction;
+import org.gradle.api.internal.tasks.testing.worker.ForkingTestClassProcessor;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.internal.Factory;
 import org.gradle.internal.actor.ActorFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
@@ -41,75 +44,68 @@ import org.gradle.internal.time.Clock;
 import org.gradle.internal.work.WorkerLeaseRegistry;
 import org.gradle.process.internal.worker.WorkerProcessFactory;
 
+import java.io.File;
+import java.util.Set;
+
 /**
- * DHE: A modified copy of Gradle's DefaultTestExecuter.
- * Modifications:
- * - Does not manage the worker lease.
- * - Omits some processors from the processor chain.
+ * The default test class scanner factory.
  */
-public class DockerizedTestExecuter
-    implements org.gradle.api.internal.tasks.testing.TestExecuter<JvmTestExecutionSpec> {
+public class DockerizedTestExecuter implements TestExecuter<JvmTestExecutionSpec> {
+
+  private static final Logger LOGGER = Logging.getLogger(DockerizedTestExecuter.class);
+
   private final WorkerProcessFactory workerFactory;
   private final ActorFactory actorFactory;
   private final ModuleRegistry moduleRegistry;
+  private final WorkerLeaseRegistry workerLeaseRegistry;
   private final BuildOperationExecutor buildOperationExecutor;
+  private final int maxWorkerCount;
   private final Clock clock;
   private final DocumentationRegistry documentationRegistry;
-  private final WorkerLeaseRegistry workerLeaseRegistry;
+  private final DefaultTestFilter testFilter;
   private TestClassProcessor processor;
 
-  public DockerizedTestExecuter(WorkerProcessFactory workerFactory, ActorFactory actorFactory,
-      ModuleRegistry moduleRegistry, WorkerLeaseRegistry workerLeaseRegistry,
-      BuildOperationExecutor buildOperationExecutor, Clock clock,
-      DocumentationRegistry documentationRegistry) {
+  public DockerizedTestExecuter(WorkerProcessFactory workerFactory, ActorFactory actorFactory, ModuleRegistry moduleRegistry,
+      WorkerLeaseRegistry workerLeaseRegistry, BuildOperationExecutor buildOperationExecutor, int maxWorkerCount,
+      Clock clock, DocumentationRegistry documentationRegistry, DefaultTestFilter testFilter) {
     this.workerFactory = workerFactory;
     this.actorFactory = actorFactory;
     this.moduleRegistry = moduleRegistry;
     this.workerLeaseRegistry = workerLeaseRegistry;
     this.buildOperationExecutor = buildOperationExecutor;
+    this.maxWorkerCount = maxWorkerCount;
     this.clock = clock;
     this.documentationRegistry = documentationRegistry;
+    this.testFilter = testFilter;
   }
 
-  // DHE: Differences from Gradle v5.5
-  // - Omits the PatternMatchTestClassProcessor and RunPreviousFailedFirstTestClassProcessor
-  //   from the processor chain.
-  // - Does not honor max-workers.
   @Override
-  public void execute(final JvmTestExecutionSpec testExecutionSpec,
-      TestResultProcessor testResultProcessor) {
+  public void execute(final JvmTestExecutionSpec testExecutionSpec, TestResultProcessor testResultProcessor) {
     final TestFramework testFramework = testExecutionSpec.getTestFramework();
     final WorkerTestClassProcessorFactory testInstanceFactory = testFramework.getProcessorFactory();
-    final WorkerLeaseRegistry.WorkerLease currentWorkerLease =
-        workerLeaseRegistry.getCurrentWorkerLease();
+    final WorkerLeaseRegistry.WorkerLease currentWorkerLease = workerLeaseRegistry.getCurrentWorkerLease();
     final Set<File> classpath = ImmutableSet.copyOf(testExecutionSpec.getClasspath());
     final Factory<TestClassProcessor> forkingProcessorFactory = new Factory<TestClassProcessor>() {
-      @Override
       public TestClassProcessor create() {
-        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory,
-            testExecutionSpec.getJavaForkOptions(),
-            classpath, testFramework.getWorkerConfigurationAction(), moduleRegistry,
-            documentationRegistry);
+        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory, testExecutionSpec.getJavaForkOptions(),
+            classpath, testFramework.getWorkerConfigurationAction(), moduleRegistry, documentationRegistry);
       }
     };
-    Factory<TestClassProcessor> reforkingProcessorFactory = new Factory<TestClassProcessor>() {
-      @Override
+    final Factory<TestClassProcessor> reforkingProcessorFactory = new Factory<TestClassProcessor>() {
       public TestClassProcessor create() {
-        return new RestartEveryNTestClassProcessor(forkingProcessorFactory,
-            testExecutionSpec.getForkEvery());
+        return new RestartEveryNTestClassProcessor(forkingProcessorFactory, testExecutionSpec.getForkEvery());
       }
     };
-
-    processor = new MaxNParallelTestClassProcessor(testExecutionSpec.getMaxParallelForks(),
-        reforkingProcessorFactory, actorFactory);
+    processor =
+        new PatternMatchTestClassProcessor(testFilter,
+            new RunPreviousFailedFirstTestClassProcessor(testExecutionSpec.getPreviousFailedTestClasses(),
+                new MaxNParallelTestClassProcessor(getMaxParallelForks(testExecutionSpec), reforkingProcessorFactory, actorFactory)));
 
     final FileTree testClassFiles = testExecutionSpec.getCandidateClassFiles();
 
     Runnable detector;
-    if (testExecutionSpec.isScanForTestClasses()) {
-      TestFrameworkDetector
-          testFrameworkDetector =
-          testExecutionSpec.getTestFramework().getDetector();
+    if (testExecutionSpec.isScanForTestClasses() && testFramework.getDetector() != null) {
+      TestFrameworkDetector testFrameworkDetector = testFramework.getDetector();
       testFrameworkDetector.setTestClasses(testExecutionSpec.getTestClassesDirs().getFiles());
       testFrameworkDetector.setTestClasspath(classpath);
       detector = new DefaultTestClassScanner(testClassFiles, testFrameworkDetector, processor);
@@ -117,17 +113,9 @@ public class DockerizedTestExecuter
       detector = new DefaultTestClassScanner(testClassFiles, null, processor);
     }
 
-    Object testTaskOperationId;
+    final Object testTaskOperationId = buildOperationExecutor.getCurrentOperation().getParentId();
 
-    try {
-      testTaskOperationId = buildOperationExecutor.getCurrentOperation().getParentId();
-    } catch (Exception e) {
-      testTaskOperationId = UUID.randomUUID();
-    }
-
-    new TestMainAction(detector, processor, testResultProcessor, clock, testTaskOperationId,
-        testExecutionSpec.getPath(), "Gradle Test Run " + testExecutionSpec.getIdentityPath())
-        .run();
+    new TestMainAction(detector, processor, testResultProcessor, clock, testTaskOperationId, testExecutionSpec.getPath(), "Gradle Test Run " + testExecutionSpec.getIdentityPath()).run();
   }
 
   @Override
@@ -135,5 +123,14 @@ public class DockerizedTestExecuter
     if (processor != null) {
       processor.stopNow();
     }
+  }
+
+  private int getMaxParallelForks(JvmTestExecutionSpec testExecutionSpec) {
+    int maxParallelForks = testExecutionSpec.getMaxParallelForks();
+    if (maxParallelForks > maxWorkerCount) {
+      LOGGER.info("{}.maxParallelForks ({}) is larger than max-workers ({}), forcing it to {}", testExecutionSpec.getPath(), maxParallelForks, maxWorkerCount, maxWorkerCount);
+      maxParallelForks = maxWorkerCount;
+    }
+    return maxParallelForks;
   }
 }

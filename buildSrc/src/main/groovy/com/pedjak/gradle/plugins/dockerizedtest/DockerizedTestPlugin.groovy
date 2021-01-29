@@ -22,6 +22,7 @@ import com.github.dockerjava.core.DockerClientBuilder
 import com.github.dockerjava.netty.NettyDockerCmdExecFactory
 import org.apache.commons.lang3.SystemUtils
 import org.apache.maven.artifact.versioning.ComparableVersion
+import org.gradle.StartParameter
 import org.gradle.api.Action
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
@@ -69,6 +70,7 @@ class DockerizedTestPlugin implements Plugin<Project> {
     void configureTest(project, test) {
         def ext = test.extensions.create("docker", DockerizedTestExtension, [] as Object[])
         def startParameter = project.gradle.startParameter
+        println("DHE: project.gradle.startParameter: $startParameter")
         ext.volumes = ["$startParameter.gradleUserHomeDir": "$startParameter.gradleUserHomeDir",
                        "$project.projectDir"              : "$project.projectDir"]
         ext.user = currentUser
@@ -77,11 +79,18 @@ class DockerizedTestPlugin implements Plugin<Project> {
 
             if (extension?.image) {
                 def processBuilderFactory = newProcessBuilderFactory(project, extension, test.processBuilderFactory)
+                println("DHE: getServices().get(StartParameter): ${getServices().get(StartParameter)}")
 
-                test.testExecuter = new DockerizedTestExecuter(processBuilderFactory, actorFactory,
-                        moduleRegistry, services.get(WorkerLeaseRegistry),
-                        services.get(BuildOperationExecutor), services.get(Clock),
-                        services.get(DocumentationRegistry));
+                test.testExecuter = new DockerizedTestExecuter(
+                        processBuilderFactory,
+                        actorFactory,
+                        moduleRegistry,
+                        services.get(WorkerLeaseRegistry),
+                        services.get(BuildOperationExecutor),
+                        getServices().get(StartParameter).getMaxWorkerCount(),
+                        services.get(Clock),
+                        services.get(DocumentationRegistry),
+                        getFilter());
 
                 // DHE: Launch a docker client if it isn't already assigned
                 if (!extension.client) {
@@ -90,7 +99,6 @@ class DockerizedTestPlugin implements Plugin<Project> {
                     extension.client = createDefaultClient()
                 }
             }
-
         }
     }
 
