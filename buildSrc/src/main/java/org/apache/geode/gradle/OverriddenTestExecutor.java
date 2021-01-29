@@ -15,6 +15,7 @@
 package org.apache.geode.gradle;
 
 import java.io.File;
+import java.util.List;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableSet;
@@ -84,11 +85,16 @@ class OverriddenTestExecutor implements TestExecuter<JvmTestExecutionSpec> {
     final WorkerTestClassProcessorFactory testInstanceFactory = testFramework.getProcessorFactory();
     final WorkerLeaseRegistry.WorkerLease currentWorkerLease = workerLeaseRegistry.getCurrentWorkerLease();
     final Set<File> classpath = ImmutableSet.copyOf(testExecutionSpec.getClasspath());
+    final Set<File> modulePath = ImmutableSet.copyOf(testExecutionSpec.getModulePath());
+    final List<String> testWorkerImplementationModules =
+        testFramework.getTestWorkerImplementationModules();
     final Factory<TestClassProcessor> forkingProcessorFactory = new Factory<TestClassProcessor>() {
       @Override
       public TestClassProcessor create() {
-        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory, testExecutionSpec.getJavaForkOptions(),
-            classpath, testFramework.getWorkerConfigurationAction(), moduleRegistry, documentationRegistry);
+        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory,
+            testExecutionSpec.getJavaForkOptions(), classpath, modulePath,
+            testWorkerImplementationModules, testFramework.getWorkerConfigurationAction(),
+            moduleRegistry, documentationRegistry);
       }
     };
     final Factory<TestClassProcessor> reforkingProcessorFactory = new Factory<TestClassProcessor>() {
@@ -113,9 +119,8 @@ class OverriddenTestExecutor implements TestExecuter<JvmTestExecutionSpec> {
       detector = new DefaultTestClassScanner(testClassFiles, null, processor);
     }
 
-    final Object testTaskOperationId = buildOperationExecutor.getCurrentOperation().getParentId();
-
-    new TestMainAction(detector, processor, testResultProcessor, clock, testTaskOperationId, testExecutionSpec.getPath(), "Gradle Test Run " + testExecutionSpec.getIdentityPath()).run();
+    new TestMainAction(detector, processor, testResultProcessor, clock, testExecutionSpec.getPath(),
+        "Gradle Test Run " + testExecutionSpec.getIdentityPath()).run();
   }
 
   @Override

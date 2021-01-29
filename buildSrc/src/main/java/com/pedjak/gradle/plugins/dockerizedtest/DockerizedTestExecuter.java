@@ -45,6 +45,7 @@ import org.gradle.internal.work.WorkerLeaseRegistry;
 import org.gradle.process.internal.worker.WorkerProcessFactory;
 
 import java.io.File;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -85,10 +86,15 @@ public class DockerizedTestExecuter implements TestExecuter<JvmTestExecutionSpec
     final WorkerTestClassProcessorFactory testInstanceFactory = testFramework.getProcessorFactory();
     final WorkerLeaseRegistry.WorkerLease currentWorkerLease = workerLeaseRegistry.getCurrentWorkerLease();
     final Set<File> classpath = ImmutableSet.copyOf(testExecutionSpec.getClasspath());
+    final Set<File> modulePath = ImmutableSet.copyOf(testExecutionSpec.getModulePath());
+    final List<String> testWorkerImplementationModules =
+        testFramework.getTestWorkerImplementationModules();
     final Factory<TestClassProcessor> forkingProcessorFactory = new Factory<TestClassProcessor>() {
       public TestClassProcessor create() {
-        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory, testExecutionSpec.getJavaForkOptions(),
-            classpath, testFramework.getWorkerConfigurationAction(), moduleRegistry, documentationRegistry);
+        return new ForkingTestClassProcessor(currentWorkerLease, workerFactory, testInstanceFactory,
+            testExecutionSpec.getJavaForkOptions(), classpath, modulePath,
+            testWorkerImplementationModules, testFramework.getWorkerConfigurationAction(),
+            moduleRegistry, documentationRegistry);
       }
     };
     final Factory<TestClassProcessor> reforkingProcessorFactory = new Factory<TestClassProcessor>() {
@@ -115,7 +121,8 @@ public class DockerizedTestExecuter implements TestExecuter<JvmTestExecutionSpec
 
     final Object testTaskOperationId = buildOperationExecutor.getCurrentOperation().getParentId();
 
-    new TestMainAction(detector, processor, testResultProcessor, clock, testTaskOperationId, testExecutionSpec.getPath(), "Gradle Test Run " + testExecutionSpec.getIdentityPath()).run();
+    new TestMainAction(detector, processor, testResultProcessor, clock, testTaskOperationId,
+        "Gradle Test Run " + testExecutionSpec.getIdentityPath()).run();
   }
 
   @Override
