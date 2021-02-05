@@ -1,0 +1,126 @@
+package com.pedjak.gradle.plugins.dockerizedtest;
+
+import static java.util.stream.Collectors.toList;
+
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Collections;
+import java.util.List;
+
+import org.gradle.api.Action;
+import org.gradle.api.UncheckedIOException;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
+import org.gradle.internal.concurrent.ExecutorFactory;
+import org.gradle.internal.impldep.com.google.common.net.InetAddresses;
+import org.gradle.internal.remote.Address;
+import org.gradle.internal.remote.ConnectionAcceptor;
+import org.gradle.internal.remote.MessagingServer;
+import org.gradle.internal.remote.ObjectConnection;
+import org.gradle.internal.remote.internal.ConnectCompletion;
+import org.gradle.internal.remote.internal.IncomingConnector;
+import org.gradle.internal.remote.internal.hub.MessageHubBackedObjectConnection;
+import org.gradle.internal.remote.internal.inet.MultiChoiceAddress;
+
+/**
+ * DHE: Modification of Gradle's MessageHubBackedServer v5.5
+ * - Modification: Insist on non-loopback addresses (where Gradle's implementation prefers
+ * loopback addresses)
+ * - Move this and the associated classes into separate (java?) files
+ */
+public class DockerizedMessagingServer implements MessagingServer {
+  private final IncomingConnector connector;
+  private final ExecutorFactory executorFactory;
+
+  public DockerizedMessagingServer(IncomingConnector connector, ExecutorFactory executorFactory) {
+    this.connector = connector;
+    this.executorFactory = executorFactory;
+  }
+
+  @Override
+  public ConnectionAcceptor accept(Action<ObjectConnection> action) {
+    return new RemoteConnectionAcceptor(
+        connector.accept(new ConnectEventAction(action, executorFactory), true));
+  }
+
+  /**
+   * DHE:
+   * - Wraps Gradle's TcpIncomingConnector
+   * - TcpIncomingConnector prefers loopback addresses
+   * - This class insists on non-loopback addresses, and so replaces the address's candidates
+   * (which are likely all loopback addresses) with non-loopback ones.
+   */
+  static class RemoteConnectionAcceptor implements ConnectionAcceptor {
+    private static final Logger LOGGER = Logging.getLogger(RemoteConnectionAcceptor.class);
+
+    private MultiChoiceAddress address;
+    private final ConnectionAcceptor delegate;
+
+    RemoteConnectionAcceptor(ConnectionAcceptor delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public Address getAddress() {
+      synchronized (delegate) {
+        if (address == null) {
+          MultiChoiceAddress original = (MultiChoiceAddress) delegate.getAddress();
+          address = new MultiChoiceAddress(
+              original.getCanonicalAddress(), original.getPort(), remoteAddresses());
+        }
+      }
+      return address;
+    }
+
+    @Override
+    public void requestStop() {
+      delegate.requestStop();
+    }
+
+    @Override
+    public void stop() {
+      delegate.stop();
+    }
+
+    private static List<InetAddress> remoteAddresses() {
+      try {
+        return Collections.list(NetworkInterface.getNetworkInterfaces()).stream()
+            .filter(RemoteConnectionAcceptor::isRemoteInterface)
+            .flatMap(i -> Collections.list(i.getInetAddresses()).stream())
+            .collect(toList());
+      } catch (SocketException e) {
+        throw new UncheckedIOException(e);
+      }
+    }
+
+    private static boolean isRemoteInterface(NetworkInterface networkInterface) {
+      try {
+        return networkInterface.isUp() && !networkInterface.isLoopback();
+      } catch (SocketException ex) {
+        LOGGER.warn("Unable to inspect interface " + networkInterface);
+        return false;
+      }
+    }
+  }
+
+  /**
+   * DHE:
+   * - Seems the same as MessageHubBackedServer.ConnectEventAction, except that it is not an
+   * inner class of the server class that uses it.
+   */
+  static class ConnectEventAction implements Action<ConnectCompletion> {
+    private final Action<ObjectConnection> action;
+    private final ExecutorFactory executorFactory;
+
+    public ConnectEventAction(Action<ObjectConnection> action, ExecutorFactory executorFactory) {
+      this.executorFactory = executorFactory;
+      this.action = action;
+    }
+
+    @Override
+    public void execute(ConnectCompletion completion) {
+      action.execute(new MessageHubBackedObjectConnection(executorFactory, completion));
+    }
+  }
+}
