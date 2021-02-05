@@ -65,21 +65,6 @@ import org.gradle.process.internal.ProcessSettings;
 import org.gradle.process.internal.StreamsHandler;
 import org.gradle.process.internal.shutdown.ShutdownHooks;
 
-// DHE:
-// Modification of: org.gradle.process.internal.DefaultExecHandle v5.5, which manages the lifecycle
-// of an external process on behalf of some Gradle task.
-//
-// Modification: Manages a process running in a docker container, rather than directly managing an
-// OS process.
-//
-// Key from v6.8
-// - Constructor takes a DockerizedTestExtension with configuration details for the container.
-// - v6.8 start() creates an ExecHandleRunner, passing it a processLauncher.
-// - This start() creates a DockerizedExecHandleRunner, and does not create a processLauncher.
-// - This runContainer() called by the DockerizedExecHandleRunner to create a container
-//   and launch a DockerizedProcess in it.
-// - This ignores some exceptions and exit return codes.
-
 /**
  * Default implementation for the ExecHandle interface.
  *
@@ -157,9 +142,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
 
   private final DockerizedTestExtension testExtension;
 
-  // DHE:
-  // - Called by DockerizedJavaExecHandleBuilder.
-  // - Modification: Add testExtension parameter with details to configure container.
   public DockerizedExecHandle(DockerizedTestExtension testExtension, String displayName,
                               File directory, String command, List<String> arguments,
                               Map<String, String> environment, StreamsHandler outputHandler,
@@ -186,7 +168,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     shutdownHookAction = new ExecHandleShutdownHookAction(this);
     broadcast = new ListenerBroadcast<>(ExecHandleListener.class);
     broadcast.addAll(listeners);
-    // DHE: v6.8 gets a processLauncher from NativeServices
   }
 
   @Override
@@ -289,19 +270,17 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
         : null;
   }
 
-  // DHE: Differs from Gradle 6.8, which checks for command line length exceeding OS limits
   private String failureMessageFor(ExecHandleState currentState) {
     return currentState == ExecHandleState.STARTING
         ? format("A problem occurred starting process '%s'", displayName)
         : format("A problem occurred waiting for process '%s' to complete.", displayName);
   }
 
-  // DHE: Can we subclass and override?
   @Override
   public ExecHandle start() {
     LOGGER.info("Starting process '{}'. Working directory: {} Command: {}",
         displayName, directory, command + ' ' + Joiner.on(' ').useForNull("null").join(arguments));
-    if (LOGGER.isDebugEnabled()) { // DHE: Additional logging
+    if (LOGGER.isDebugEnabled()) {
       LOGGER.debug("Environment for process '{}': {}", displayName, environment);
     }
     lock.lock();
@@ -312,7 +291,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
       }
       setState(ExecHandleState.STARTING);
 
-      // DHE: Can this be changed to use ExecHandleRunner with a specialized process launcher?
       execHandleRunner =
           new DockerizedExecHandleRunner(this, new CompositeStreamsHandler(), executor);
       executor.execute(new CurrentBuildOperationPreservingRunnable(execHandleRunner));
@@ -326,7 +304,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
           }
         } catch (InterruptedException e) {
           //ok, wrapping up
-          // DHE: v6.8 handles the exception by aborting the execHandleRunner and rethrowing
         }
       }
 
@@ -369,7 +346,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
           stateChanged.await();
         } catch (InterruptedException e) {
           //ok, wrapping up...
-          // DHE: v6.8 aborts the execHandleRunner before rethrowing
           throw UncheckedException.throwAsUncheckedException(e);
         }
       }
@@ -448,9 +424,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     return timeoutMillis;
   }
 
-  // DHE:
-  // - Called by DockerizedExecHandleRunner.run()
-  // - Uses dockerjava API to run the command in docker
   public Process runContainer() {
     try {
       DockerClient client = testExtension.getClient();
@@ -490,7 +463,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     }
   }
 
-  // DHE: Called by runContainer()
   private void invokeIfNotNull(Closure closure, Object... args) {
     if (closure != null) {
       int l = closure.getParameterTypes().length;
@@ -505,7 +477,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     }
   }
 
-  // DHE: Called by runContainer()
   private List<String> getEnv() {
     List<String> env = new ArrayList<>();
     for (Map.Entry<String, String> e : environment.entrySet()) {
@@ -514,7 +485,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     return env;
   }
 
-  // DHE: Called by runContainer()
   private void bindVolumes(CreateContainerCmd cmd) {
     List<Volume> volumes = new ArrayList<>();
     List<Bind> binds = new ArrayList<>();
@@ -543,11 +513,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
       return exitValue;
     }
 
-    // DHE:
-    // - v6.8 does not comment out the implementation
-    // - What makes all exit values ok in Docker?
-    // - What happens if we uncomment this code?
-
     @Override
     public ExecResult assertNormalExitValue() throws ExecException {
       // all exit values are ok
@@ -571,7 +536,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     }
   }
 
-  // DHE: Identical to v6.8
   private class CompositeStreamsHandler implements StreamsHandler {
     @Override
     public void connectStreams(Process process, String processName, Executor executor) {
@@ -598,14 +562,10 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
     }
   }
 
-  // DHE:
-  // - Wraps a docker client/container in a Process
-  // - Extract to top level
   private class DockerizedProcess extends Process {
 
     private final DockerClient dockerClient;
     private final String containerId;
-    // DHE: Use a more specific functional interface?
     private final Closure afterContainerStop;
 
     private final PipedOutputStream stdInWriteStream = new PipedOutputStream();
@@ -617,7 +577,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
 
     private final CountDownLatch finished = new CountDownLatch(1);
     private final AtomicInteger exitCode = new AtomicInteger();
-    // DHE: Fix deprecation
     private final AttachContainerResultCallback
         attachContainerResultCallback =
         new AttachContainerResultCallback() {
@@ -636,7 +595,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
           }
         };
 
-    // DHE: Fix deprecation
     private final WaitContainerResultCallback
         waitContainerResultCallback =
         new WaitContainerResultCallback() {
@@ -665,8 +623,6 @@ public class DockerizedExecHandle implements ExecHandle, ProcessSettings {
           }
         };
 
-    // DHE:
-    // - Called by runContainer()
     public DockerizedProcess(final DockerClient dockerClient, final String containerId,
                              final Closure afterContainerStop) throws Exception {
       this.dockerClient = dockerClient;

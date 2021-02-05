@@ -41,16 +41,11 @@ import org.gradle.process.internal.worker.DefaultWorkerProcessFactory
 
 import javax.inject.Inject
 
-/**
- * DHE:
- * - Configures each test task to run each test worker in a separate Docker container.
- */
 class DockerizedTestPlugin implements Plugin<Project> {
-    // DHE: minimum supported Gradle version. Perhaps we should also constrain the maximum version.
+    // TODO: Also constrain the maximum version?
     def supportedVersion = '6.8'
     def currentUser
     def messagingServer
-    // DHE: What is the purpose of this?
     def memoryManager = new NoMemoryManager()
 
     @Inject
@@ -81,10 +76,7 @@ class DockerizedTestPlugin implements Plugin<Project> {
                         services.get(DocumentationRegistry),
                         getFilter());
 
-                // DHE: Launch a docker client if it isn't already assigned
                 if (!extension.client) {
-                    // DHE: If we give each test task its own client, would the client already be
-                    // assigned at this point?
                     extension.client = createDefaultClient()
                 }
             }
@@ -102,10 +94,8 @@ class DockerizedTestPlugin implements Plugin<Project> {
         boolean unsupportedVersion = new ComparableVersion(project.gradle.gradleVersion).compareTo(new ComparableVersion(supportedVersion)) < 0
         if (unsupportedVersion) throw new GradleException("dockerized-test plugin requires Gradle ${supportedVersion}+")
 
-        // DHE: Configure all existing test tasks
         project.tasks.withType(Test).each { test -> configureTest(project, test) }
 
-        // DHE: Arrange to configure subsequently added test tasks
         project.tasks.whenTaskAdded { task ->
             if (task instanceof Test) configureTest(project, task)
         }
@@ -119,14 +109,11 @@ class DockerizedTestPlugin implements Plugin<Project> {
 
         def defaultfilecollectionFactory = new DefaultFileCollectionFactory(project.fileResolver, null)
 
-        // DHE: Create an exec handle factory that creates Dockerized exec handles
         def execHandleFactory = [newJavaExec: { ->
             new DockerizedJavaExecHandleBuilder(extension, project.fileResolver,
                     defaultfilecollectionFactory, executor, buildCancellationToken)
         }] as JavaExecHandleFactory
 
-        // DHE: Return a default worker process factory that gets most details from the given
-        // factory, but uses our custom exec handle factory, messaging server, and memory manager.
         new DefaultWorkerProcessFactory(defaultProcessBuilderFactory.loggingManager,
                 messagingServer,
                 defaultProcessBuilderFactory.workerImplementationFactory.classPathRegistry,

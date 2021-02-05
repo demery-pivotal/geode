@@ -48,7 +48,6 @@ if (project.hasProperty('parallelDunit')) {
 }
 
 project.ext.dockerConfig = {
-  println "DHE: Executing dockerConfig on $this"
   maxParallelForks = dunitParallelForks.toInteger()
 
   docker {

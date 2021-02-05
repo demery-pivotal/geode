@@ -24,9 +24,6 @@ import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.process.internal.StreamsHandler;
 
-/**
- * DHE: Copy of ExecHandleRunner v5.5, modified to call runContainer().
- */
 public class DockerizedExecHandleRunner implements Runnable {
   private static final Logger LOGGER =
       Logging.getLogger(org.gradle.process.internal.ExecHandleRunner.class);
@@ -39,7 +36,6 @@ public class DockerizedExecHandleRunner implements Runnable {
   private boolean aborted;
   private final StreamsHandler streamsHandler;
 
-  // DHE: v6.8 adds new ProcessLauncher parameter
   public DockerizedExecHandleRunner(DockerizedExecHandle execHandle, StreamsHandler streamsHandler,
                                     Executor executor) {
     this.executor = executor;
@@ -50,7 +46,6 @@ public class DockerizedExecHandleRunner implements Runnable {
     this.execHandle = execHandle;
   }
 
-  // DHE: v6.8 has some differences in its cleanup
   public void abortProcess() {
     lock.lock();
     try {
@@ -64,9 +59,6 @@ public class DockerizedExecHandleRunner implements Runnable {
     }
   }
 
-  // DHE:
-  // - v6.8 Delegates launching the process to a ProcessLauncher.
-  // - We can likely use a standard ExecHandleRunner with a custom ProcessLauncher.
   @Override
   public void run() {
     try {

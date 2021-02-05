@@ -23,10 +23,8 @@ import org.gradle.internal.remote.internal.hub.MessageHubBackedObjectConnection;
 import org.gradle.internal.remote.internal.inet.MultiChoiceAddress;
 
 /**
- * DHE: Modification of Gradle's MessageHubBackedServer v5.5
- * - Modification: Insist on non-loopback addresses (where Gradle's implementation prefers
- * loopback addresses)
- * - Move this and the associated classes into separate (java?) files
+ * A copy of Gradle's MessageHubBackedServer, modified to insist on non-loopback
+ * addresses (where Gradle's implementation prefers loopback addresses).
  */
 public class DockerizedMessagingServer implements MessagingServer {
   private final IncomingConnector connector;
@@ -43,13 +41,6 @@ public class DockerizedMessagingServer implements MessagingServer {
         connector.accept(new ConnectEventAction(action, executorFactory), true));
   }
 
-  /**
-   * DHE:
-   * - Wraps Gradle's TcpIncomingConnector
-   * - TcpIncomingConnector prefers loopback addresses
-   * - This class insists on non-loopback addresses, and so replaces the address's candidates
-   * (which are likely all loopback addresses) with non-loopback ones.
-   */
   static class RemoteConnectionAcceptor implements ConnectionAcceptor {
     private static final Logger LOGGER = Logging.getLogger(RemoteConnectionAcceptor.class);
 
@@ -103,11 +94,6 @@ public class DockerizedMessagingServer implements MessagingServer {
     }
   }
 
-  /**
-   * DHE:
-   * - Seems the same as MessageHubBackedServer.ConnectEventAction, except that it is not an
-   * inner class of the server class that uses it.
-   */
   static class ConnectEventAction implements Action<ConnectCompletion> {
     private final Action<ObjectConnection> action;
     private final ExecutorFactory executorFactory;
