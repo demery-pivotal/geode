@@ -1,4 +1,4 @@
-package com.pedjak.gradle.plugins.dockerizedtest;
+package com.pedjak.gradle.plugins.test.dockerized;
 
 import static java.util.stream.Collectors.toList;
 
@@ -13,7 +13,6 @@ import org.gradle.api.UncheckedIOException;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.concurrent.ExecutorFactory;
-import org.gradle.internal.impldep.com.google.common.net.InetAddresses;
 import org.gradle.internal.remote.Address;
 import org.gradle.internal.remote.ConnectionAcceptor;
 import org.gradle.internal.remote.MessagingServer;

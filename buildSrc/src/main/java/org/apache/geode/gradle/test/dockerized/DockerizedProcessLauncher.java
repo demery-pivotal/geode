@@ -1,4 +1,4 @@
-package org.apache.geode.gradle.dockerizedtest;
+package org.apache.geode.gradle.test.dockerized;
 
 import static java.util.stream.Collectors.toList;
 

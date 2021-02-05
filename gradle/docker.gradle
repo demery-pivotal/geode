@@ -38,7 +38,7 @@
  *                       The default is 'root'.
  */
 
-apply plugin: 'com.github.pedjak.dockerized-test'
+apply plugin: 'geode-dockerized-test'
 
 
 if (project.hasProperty('parallelDunit')) {
@@ -48,6 +48,7 @@ if (project.hasProperty('parallelDunit')) {
 }
 
 project.ext.dockerConfig = {
+  println "DHE: Executing dockerConfig on $this"
   maxParallelForks = dunitParallelForks.toInteger()
 
   docker {

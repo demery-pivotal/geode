@@ -1,6 +1,7 @@
-package org.apache.geode.gradle.dockerizedtest
+package org.apache.geode.gradle.test.dockerized
 
 class DockerizedTestConfig {
+    Closure beforeContainerCreate
     String user;
     String image;
     Map<String, String> volumes = new HashMap<>();
