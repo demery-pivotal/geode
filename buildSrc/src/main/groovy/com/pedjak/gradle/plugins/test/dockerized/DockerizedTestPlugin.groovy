@@ -42,7 +42,6 @@ import org.gradle.process.internal.worker.DefaultWorkerProcessFactory
 import javax.inject.Inject
 
 class DockerizedTestPlugin implements Plugin<Project> {
-    // TODO: Also constrain the maximum version?
     def supportedVersion = '6.8'
     def currentUser
     def messagingServer
