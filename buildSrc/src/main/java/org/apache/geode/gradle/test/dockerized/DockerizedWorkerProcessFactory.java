@@ -18,7 +18,8 @@ public class DockerizedWorkerProcessFactory implements WorkerProcessFactory {
   @Override
   public WorkerProcessBuilder create(Action<? super WorkerProcessContext> action) {
     WorkerProcessBuilder builder = delegate.create(action);
-    return delegate.create(action);
+    System.out.printf("DHE: %s created %s%n", this, builder);
+    return builder;
   }
 
   @Override

@@ -1,14 +1,16 @@
 package org.apache.geode.gradle.test.dockerized
 
-import net.rubygrapefruit.platform.ProcessLauncher
+
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.tasks.testing.Test
+import org.gradle.process.internal.worker.WorkerProcessFactory
 
 class DockerizedTestPlugin implements Plugin<Project> {
     String image
     String user
     Map volumes
+    WorkerProcessFactory dockerWorkerProcessFactory
 
     @Override
     void apply(Project project) {
@@ -28,7 +30,12 @@ class DockerizedTestPlugin implements Plugin<Project> {
             volumes << project.dunitDockerVolumes
         }
 
-        project.tasks.withType(Test).each { it -> configureTest(project, it) }
+        def existingTestTasks = project.tasks.withType(Test)
+        dockerWorkerProcessFactory = existingTestTasks.first().processBuilderFactory
+        println "DHE: $this docker worker process factory is $dockerWorkerProcessFactory"
+        existingTestTasks.each {
+            configureTest(project, it)
+        }
         project.tasks.whenTaskAdded { task ->
             if (task instanceof Test) configureTest(project, task)
         }
@@ -40,8 +47,6 @@ class DockerizedTestPlugin implements Plugin<Project> {
         config.user = user
         config.volumes = volumes
         test.doFirst {
-            println "DHE: ProcessLauncher is " + test.services.get(ProcessLauncher)
-            // Inject our special dockerized process launcher
         }
     }
 }
