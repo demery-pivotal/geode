@@ -40,24 +40,18 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import junitparams.JUnitParamsRunner;
-import junitparams.Parameters;
-import junitparams.naming.TestCaseName;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.apache.geode.CancelCriterion;
 import org.apache.geode.Statistics;
 import org.apache.geode.cache.AttributesFactory;
-import org.apache.geode.cache.CacheLoader;
-import org.apache.geode.cache.CacheWriter;
 import org.apache.geode.cache.Operation;
+import org.apache.geode.cache.PartitionAttributes;
 import org.apache.geode.cache.PartitionAttributesFactory;
-import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionDestroyedException;
 import org.apache.geode.cache.TransactionDataRebalancedException;
 import org.apache.geode.cache.TransactionException;
@@ -71,15 +65,12 @@ import org.apache.geode.distributed.internal.membership.InternalDistributedMembe
 import org.apache.geode.internal.cache.control.InternalResourceManager;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
 
-@RunWith(JUnitParamsRunner.class)
-@SuppressWarnings({"deprecation", "unchecked", "unused"})
 public class PartitionedRegionTest {
 
   private InternalCache cache;
   private InternalDistributedSystem system;
   private DistributionManager distributionManager;
-  private InternalResourceManager resourceManager;
-  private AttributesFactory attributesFactory;
+  private AttributesFactory<?,?> attributesFactory;
 
   private PartitionedRegion partitionedRegion;
 
@@ -94,9 +85,10 @@ public class PartitionedRegionTest {
     InternalResourceManager resourceManager = mock(InternalResourceManager.class);
 
     cache = mock(InternalCache.class);
-    attributesFactory = new AttributesFactory();
-    attributesFactory.setPartitionAttributes(
-        new PartitionAttributesFactory().setTotalNumBuckets(1).setRedundantCopies(1).create());
+    PartitionAttributes<?,?> partitionAttributes =
+      new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
+    attributesFactory = new AttributesFactory<>();
+    attributesFactory.setPartitionAttributes(partitionAttributes);
 
     when(cache.getDistributedSystem())
         .thenReturn(system);
@@ -120,94 +112,11 @@ public class PartitionedRegionTest {
         ColocationLoggerFactory.create());
   }
 
-  private Object[] cacheLoaderAndWriter() {
-    CacheLoader mockLoader = mock(CacheLoader.class);
-    CacheWriter mockWriter = mock(CacheWriter.class);
-    return new Object[] {
-        new Object[] {mockLoader, null},
-        new Object[] {null, mockWriter},
-        new Object[] {mockLoader, mockWriter},
-        new Object[] {null, null}
-    };
-  }
-
-  @Test
-  @Parameters(method = "cacheLoaderAndWriter")
-  @TestCaseName("{method}(CacheLoader={0}, CacheWriter={1})")
-  public void verifyPRConfigUpdatedAfterLoaderUpdate(CacheLoader cacheLoader,
-      CacheWriter cacheWriter) {
-    // ARRANGE
-    PartitionRegionConfig partitionRegionConfig = mock(PartitionRegionConfig.class);
-    Region<String, PartitionRegionConfig> partitionedRegionRoot = mock(LocalRegion.class);
-    PartitionedRegion.RegionLock regionLock = mock(PartitionedRegion.RegionLock.class);
-    PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
-    InternalDistributedMember ourMember = spyPartitionedRegion.getDistributionManager().getId();
-    InternalDistributedMember otherMember1 = mock(InternalDistributedMember.class);
-    InternalDistributedMember otherMember2 = mock(InternalDistributedMember.class);
-    Node ourNode = mock(Node.class, "ourNode");
-    Node otherNode1 = mock(Node.class, "otherNode1");
-    Node otherNode2 = mock(Node.class, "otherNode2");
-
-    when(otherNode1.getMemberId())
-        .thenReturn(otherMember1);
-    when(otherNode2.getMemberId())
-        .thenReturn(otherMember2);
-    when(ourNode.getMemberId())
-        .thenReturn(ourMember);
-    when(ourNode.isCacheLoaderAttached())
-        .thenReturn(cacheLoader != null);
-    when(ourNode.isCacheWriterAttached())
-        .thenReturn(cacheWriter != null);
-    when(partitionRegionConfig.getNodes())
-        .thenReturn(asSet(otherNode1, ourNode, otherNode2));
-    when(partitionedRegionRoot.get(spyPartitionedRegion.getRegionIdentifier()))
-        .thenReturn(partitionRegionConfig);
-    when(spyPartitionedRegion.getPRRoot())
-        .thenReturn(partitionedRegionRoot);
-
-    doReturn(cacheLoader)
-        .when(spyPartitionedRegion).basicGetLoader();
-    doReturn(cacheWriter)
-        .when(spyPartitionedRegion).basicGetWriter();
-    doReturn(regionLock)
-        .when(spyPartitionedRegion).getRegionLock();
-
-    // ACT
-    spyPartitionedRegion.updatePRNodeInformation();
-
-    // ASSERT
-    assertThat(partitionRegionConfig.getNodes())
-        .contains(ourNode);
-
-    Node verifyOurNode = null;
-    for (Node node : partitionRegionConfig.getNodes()) {
-      if (node.getMemberId().equals(ourMember)) {
-        verifyOurNode = node;
-      }
-    }
-    assertThat(verifyOurNode)
-        .withFailMessage("Failed to find " + ourMember + " in " + partitionRegionConfig.getNodes())
-        .isNotNull();
-
-    verify(partitionedRegionRoot)
-        .get(spyPartitionedRegion.getRegionIdentifier());
-    verify(partitionedRegionRoot)
-        .put(spyPartitionedRegion.getRegionIdentifier(), partitionRegionConfig);
-    verify(spyPartitionedRegion)
-        .updatePRConfig(partitionRegionConfig, false);
-
-    assertThat(verifyOurNode.isCacheLoaderAttached())
-        .isEqualTo(cacheLoader != null);
-    assertThat(verifyOurNode.isCacheWriterAttached())
-        .isEqualTo(cacheWriter != null);
-  }
-
   @Test
   public void getBucketNodeForReadOrWriteReturnsPrimaryNodeForRegisterInterest() {
     // ARRANGE
     EntryEventImpl clientEvent = mock(EntryEventImpl.class);
     InternalDistributedMember primaryMember = mock(InternalDistributedMember.class);
-    InternalDistributedMember secondaryMember = mock(InternalDistributedMember.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
 
     when(clientEvent.getOperation())
@@ -232,7 +141,6 @@ public class PartitionedRegionTest {
   public void getBucketNodeForReadOrWriteReturnsSecondaryNodeForNonRegisterInterest() {
     // ARRANGE
     EntryEventImpl clientEvent = mock(EntryEventImpl.class);
-    InternalDistributedMember primaryMember = mock(InternalDistributedMember.class);
     InternalDistributedMember secondaryMember = mock(InternalDistributedMember.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
 
@@ -257,7 +165,6 @@ public class PartitionedRegionTest {
   @Test
   public void getBucketNodeForReadOrWriteReturnsSecondaryNodeWhenClientEventIsNotPresent() {
     // ARRANGE
-    InternalDistributedMember primaryMember = mock(InternalDistributedMember.class);
     InternalDistributedMember secondaryMember = mock(InternalDistributedMember.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
 
@@ -279,7 +186,6 @@ public class PartitionedRegionTest {
   @Test
   public void getBucketNodeForReadOrWriteReturnsSecondaryNodeWhenClientEventOperationIsNotPresent() {
     // ARRANGE
-    InternalDistributedMember primaryMember = mock(InternalDistributedMember.class);
     InternalDistributedMember secondaryMember = mock(InternalDistributedMember.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
 
@@ -302,7 +208,6 @@ public class PartitionedRegionTest {
   public void updateBucketMapsForInterestRegistrationWithSetOfKeysFetchesPrimaryBucketsForRead() {
     // ARRANGE
     InternalDistributedMember primaryMember = mock(InternalDistributedMember.class);
-    InternalDistributedMember secondaryMember = mock(InternalDistributedMember.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
 
     doReturn(primaryMember)
@@ -322,7 +227,6 @@ public class PartitionedRegionTest {
   public void updateBucketMapsForInterestRegistrationWithAllKeysFetchesPrimaryBucketsForRead() {
     // ARRANGE
     InternalDistributedMember primaryMember = mock(InternalDistributedMember.class);
-    InternalDistributedMember secondaryMember = mock(InternalDistributedMember.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
 
     doReturn(primaryMember)
