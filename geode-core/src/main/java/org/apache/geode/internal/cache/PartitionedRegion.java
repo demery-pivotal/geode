@@ -776,20 +776,50 @@ public class PartitionedRegion extends LocalRegion
    * storage enabled. A PartitionedRegion can be created by a factory method of RegionFactory.java
    * and also by invoking Cache.createRegion(). (Cache.xml etc to be added)
    */
-  public PartitionedRegion(String regionName,
-      RegionAttributes regionAttributes,
-      LocalRegion parentRegion,
-      InternalCache cache,
-      InternalRegionArguments internalRegionArgs,
-      StatisticsClock statisticsClock,
-      ColocationLoggerFactory colocationLoggerFactory) {
+  public PartitionedRegion(
+    String regionName,
+    RegionAttributes regionAttributes,
+    LocalRegion parentRegion,
+    InternalCache cache,
+    InternalRegionArguments internalRegionArgs,
+    StatisticsClock statisticsClock,
+    ColocationLoggerFactory colocationLoggerFactory) {
+    this(
+      regionName,
+      regionAttributes,
+      parentRegion,
+      cache,
+      internalRegionArgs,
+      statisticsClock,
+      colocationLoggerFactory,
+      RegionAdvisor::createRegionAdvisor,
+      new PartitionedRegionDataView(),
+      new Node(cache.getDistributionManager().getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement()),
+      cache.getInternalDistributedSystem(),
+      PartitionedRegionStats::new,
+      SenderIdMonitor::createSenderIdMonitor);
+  }
+
+  public PartitionedRegion(
+    String regionName,
+    RegionAttributes regionAttributes,
+    LocalRegion parentRegion,
+    InternalCache cache,
+    InternalRegionArguments internalRegionArgs,
+    StatisticsClock statisticsClock,
+    ColocationLoggerFactory colocationLoggerFactory,
+    RegionAdvisor.Factory regionAdvisorFactory,
+    InternalDataView partitionedRegionDataView,
+    Node node,
+    InternalDistributedSystem system,
+    PartitionedRegionStats.Factory partitionedRegionStatsFactory,
+    SenderIdMonitor.Factory senderIdMonitorFactory) {
     super(regionName, regionAttributes, parentRegion, cache, internalRegionArgs,
-        new PartitionedRegionDataView(), statisticsClock);
+        partitionedRegionDataView, statisticsClock);
 
     this.colocationLoggerFactory = colocationLoggerFactory;
-    this.node = initializeNode();
-    this.prStats = new PartitionedRegionStats(cache.getDistributedSystem(), getFullPath(),
-        statisticsClock);
+    this.node = node;
+    this.prStats = partitionedRegionStatsFactory.create(system, getFullPath(), statisticsClock);
     this.regionIdentifier = getFullPath().replace(Region.SEPARATOR_CHAR, '#');
 
     if (logger.isDebugEnabled()) {
@@ -800,7 +830,7 @@ public class PartitionedRegion extends LocalRegion
     // up upon
     // distributed system disconnect even this (or other) PRs are destroyed
     // (which prevents pridmap cleanup).
-    cache.getInternalDistributedSystem().addDisconnectListener(dsPRIdCleanUpListener);
+    system.addDisconnectListener(dsPRIdCleanUpListener);
 
     this.partitionAttributes = regionAttributes.getPartitionAttributes();
     this.localMaxMemory = this.partitionAttributes.getLocalMaxMemory();
@@ -810,15 +840,11 @@ public class PartitionedRegion extends LocalRegion
     this.prStats.incTotalNumBuckets(this.totalNumberOfBuckets);
 
     // Warning: potential early escape of instance
-    this.distAdvisor = RegionAdvisor.createRegionAdvisor(this);
-    senderIdMonitor = createSenderIdMonitor();
+    this.distAdvisor = regionAdvisorFactory.create(this);
+    senderIdMonitor = senderIdMonitorFactory.create(this, this.distAdvisor);
     // Warning: potential early escape of instance
     this.redundancyProvider = new PRHARedundancyProvider(this, cache.getInternalResourceManager());
 
-    // localCacheEnabled = ra.getPartitionAttributes().isLocalCacheEnabled();
-    // This is to make sure that local-cache get and put works properly.
-    // getScope is overridden to return the correct scope.
-    // this.scope = Scope.LOCAL;
     this.redundantCopies = regionAttributes.getPartitionAttributes().getRedundantCopies();
     this.redundancyTracker = new PartitionedRegionRedundancyTracker(this.totalNumberOfBuckets,
         this.redundantCopies, this.prStats, getFullPath());
@@ -1230,13 +1256,6 @@ public class PartitionedRegion extends LocalRegion
   }
 
   /**
-   * Initializes the Node for this Map.
-   */
-  private Node initializeNode() {
-    return new Node(getDistributionManager().getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement());
-  }
-
-  /**
    * receive notification that a cache server or wan gateway has been created that requires
    * notification of cache events from this region
    */
@@ -1327,10 +1346,6 @@ public class PartitionedRegion extends LocalRegion
     super.removeAsyncEventQueueId(asyncEventQueueId);
     new UpdateAttributesProcessor(this).distribute();
     updateSenderIdMonitor();
-  }
-
-  private SenderIdMonitor createSenderIdMonitor() {
-    return SenderIdMonitor.createSenderIdMonitor(this, this.distAdvisor);
   }
 
   private void updateSenderIdMonitor() {

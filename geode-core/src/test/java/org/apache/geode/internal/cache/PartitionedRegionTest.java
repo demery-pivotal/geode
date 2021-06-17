@@ -47,7 +47,6 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.apache.geode.CancelCriterion;
-import org.apache.geode.Statistics;
 import org.apache.geode.cache.AttributesFactory;
 import org.apache.geode.cache.Operation;
 import org.apache.geode.cache.PartitionAttributes;
@@ -63,6 +62,7 @@ import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
+import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
 
 public class PartitionedRegionTest {
@@ -70,8 +70,6 @@ public class PartitionedRegionTest {
   private InternalCache cache;
   private InternalDistributedSystem system;
   private DistributionManager distributionManager;
-  private AttributesFactory<?,?> attributesFactory;
-
   private PartitionedRegion partitionedRegion;
 
   @Rule
@@ -79,27 +77,29 @@ public class PartitionedRegionTest {
 
   @Before
   public void setUp() {
-    system = mock(InternalDistributedSystem.class);
-    distributionManager = mock(DistributionManager.class);
-    InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
-    InternalResourceManager resourceManager = mock(InternalResourceManager.class);
-
     cache = mock(InternalCache.class);
+    distributionManager = mock(DistributionManager.class);
+    system = mock(InternalDistributedSystem.class);
+
+    InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
+    InternalDataView internalDataView = mock(InternalDataView.class);
+    InternalResourceManager resourceManager = mock(InternalResourceManager.class);
+    PartitionedRegionStats.Factory partitionedRegionStatsFactory =
+      mock(PartitionedRegionStats.Factory.class);
+    RegionAdvisor.Factory regionAdvisorFactory = mock(RegionAdvisor.Factory.class);
+    SenderIdMonitor.Factory senderIdMonitorFactory = mock(SenderIdMonitor.Factory.class);
+
     PartitionAttributes<?,?> partitionAttributes =
       new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
-    attributesFactory = new AttributesFactory<>();
+    AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
     attributesFactory.setPartitionAttributes(partitionAttributes);
 
-    when(cache.getDistributedSystem())
-        .thenReturn(system);
     when(cache.getInternalDistributedSystem())
         .thenReturn(system);
     when(cache.getInternalResourceManager())
         .thenReturn(resourceManager);
-    when(distributionManager.getId())
-        .thenReturn(distributedMember);
-    when(system.createAtomicStatistics(any(), any()))
-        .thenReturn(mock(Statistics.class));
+    when(partitionedRegionStatsFactory.create(any(), any(), any()))
+      .thenReturn(mock(PartitionedRegionStats.class));
     when(system.getClock())
         .thenReturn(mock(DSClock.class));
     when(system.getDistributedMember())
@@ -107,9 +107,11 @@ public class PartitionedRegionTest {
     when(system.getDistributionManager())
         .thenReturn(distributionManager);
 
-    partitionedRegion = new PartitionedRegion("regionName", attributesFactory.create(), null,
-        cache, mock(InternalRegionArguments.class), disabledClock(),
-        ColocationLoggerFactory.create());
+    partitionedRegion =
+      new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
+        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
+        regionAdvisorFactory, internalDataView, null /* Node*/, system,
+        partitionedRegionStatsFactory, senderIdMonitorFactory);
   }
 
   @Test
@@ -315,11 +317,6 @@ public class PartitionedRegionTest {
 
   @Test
   public void getLocalSizeDoesNotThrowIfRegionUninitialized() {
-    // ARRANGE
-    partitionedRegion = new PartitionedRegion("region", attributesFactory.create(), null, cache,
-        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create());
-
-    // ACT/ASSERT
     assertThatCode(partitionedRegion::getLocalSize)
         .doesNotThrowAnyException();
   }
@@ -479,9 +476,6 @@ public class PartitionedRegionTest {
 
   @Test
   public void testGetRegionCreateNotification() {
-    partitionedRegion = new PartitionedRegion("region", attributesFactory.create(), null, cache,
-        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create());
-
     assertThat(partitionedRegion.isRegionCreateNotified()).isFalse();
 
     partitionedRegion.setRegionCreateNotified(true);
@@ -491,9 +485,6 @@ public class PartitionedRegionTest {
 
   @Test
   public void testNotifyRegionCreated() {
-    partitionedRegion = new PartitionedRegion("region", attributesFactory.create(), null, cache,
-        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create());
-
     assertThat(partitionedRegion.isRegionCreateNotified()).isFalse();
 
     partitionedRegion.notifyRegionCreated();

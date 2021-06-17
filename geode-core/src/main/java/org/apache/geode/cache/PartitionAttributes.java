@@ -172,4 +172,6 @@ public interface PartitionAttributes<K, V> {
 
     return configAttributes;
   }
+
+  void setOffHeap(boolean offHeap);
 }

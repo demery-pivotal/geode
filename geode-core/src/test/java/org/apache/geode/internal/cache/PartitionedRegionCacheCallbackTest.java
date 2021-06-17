@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.quality.Strictness.STRICT_STUBS;
 
 import java.util.HashSet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
@@ -24,7 +25,7 @@ import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import org.apache.geode.Statistics;
+import org.apache.geode.annotations.internal.MakeNotStatic;
 import org.apache.geode.cache.AttributesFactory;
 import org.apache.geode.cache.CacheLoader;
 import org.apache.geode.cache.CacheWriter;
@@ -36,10 +37,15 @@ import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
+import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
 
 @RunWith(JUnitParamsRunner.class)
 public class PartitionedRegionCacheCallbackTest {
+
+  // TODO: DHE Why is this static?
+  @MakeNotStatic
+  private static final AtomicInteger SERIAL_NUMBER_GENERATOR = new AtomicInteger();
 
   private PartitionedRegion partitionedRegion;
 
@@ -48,37 +54,44 @@ public class PartitionedRegionCacheCallbackTest {
 
   @Before
   public void setUp() {
-    InternalDistributedSystem system = mock(InternalDistributedSystem.class);
+    InternalCache cache = mock(InternalCache.class);
     DistributionManager distributionManager = mock(DistributionManager.class);
     InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
+    InternalDataView internalDataView = mock(InternalDataView.class);
+    PartitionedRegionStats.Factory partitionedRegionStatsFactory =
+      mock(PartitionedRegionStats.Factory.class);
+    RegionAdvisor.Factory regionAdvisorFactory = mock(RegionAdvisor.Factory.class);
     InternalResourceManager resourceManager = mock(InternalResourceManager.class);
+    SenderIdMonitor.Factory senderIdMonitorFactory = mock(SenderIdMonitor.Factory.class);
+    InternalDistributedSystem system = mock(InternalDistributedSystem.class);
 
-    InternalCache cache = mock(InternalCache.class);
-    PartitionAttributes<?, ?> partitionAttributes =
+    PartitionAttributes<?,?> partitionAttributes =
       new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
-    AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
+    AttributesFactory<?,?> attributesFactory = new AttributesFactory<>();
     attributesFactory.setPartitionAttributes(partitionAttributes);
 
-    when(cache.getDistributedSystem())
-      .thenReturn(system);
     when(cache.getInternalDistributedSystem())
       .thenReturn(system);
     when(cache.getInternalResourceManager())
       .thenReturn(resourceManager);
-    when(distributionManager.getId())
-      .thenReturn(distributedMember);
-    when(system.createAtomicStatistics(any(), any()))
-      .thenReturn(mock(Statistics.class));
+    when(partitionedRegionStatsFactory.create(any(), any(), any()))
+      .thenReturn(mock(PartitionedRegionStats.class));
     when(system.getClock())
       .thenReturn(mock(DSClock.class));
     when(system.getDistributedMember())
       .thenReturn(distributedMember);
     when(system.getDistributionManager())
       .thenReturn(distributionManager);
+    when(distributionManager.getId())
+      .thenReturn(distributedMember);
 
-    partitionedRegion = new PartitionedRegion("regionName", attributesFactory.create(), null,
-      cache, mock(InternalRegionArguments.class), disabledClock(),
-      ColocationLoggerFactory.create());
+    Node node = new Node(distributionManager.getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement());
+
+    partitionedRegion =
+      new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
+        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
+        regionAdvisorFactory, internalDataView, node, system, partitionedRegionStatsFactory,
+        senderIdMonitorFactory);
   }
 
   @SuppressWarnings("unused")

@@ -175,4 +175,5 @@ public class Node extends ExternalizableDSFID {
   public KnownVersion[] getSerializationVersions() {
     return null;
   }
+
 }

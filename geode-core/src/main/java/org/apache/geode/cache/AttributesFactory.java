@@ -1095,8 +1095,7 @@ public class AttributesFactory<K, V> {
         this.regionAttributes.setHasPartitionAttributes(true);
       }
 
-      ((PartitionAttributesImpl) this.regionAttributes.partitionAttributes)
-          .setOffHeap(this.regionAttributes.offHeap);
+      this.regionAttributes.partitionAttributes.setOffHeap(this.regionAttributes.offHeap);
     } else {
       this.regionAttributes.partitionAttributes = null;
       this.regionAttributes.setHasPartitionAttributes(false);
