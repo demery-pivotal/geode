@@ -318,6 +318,7 @@ public class PartitionedRegion extends LocalRegion
       return i;
     }
   };
+  private final DataStoreFactory dataStoreFactory;
 
   /**
    * Global Region for storing PR config ( PRName->PRConfig). This region would be used to resolve
@@ -797,7 +798,9 @@ public class PartitionedRegion extends LocalRegion
       new Node(cache.getDistributionManager().getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement()),
       cache.getInternalDistributedSystem(),
       PartitionedRegionStats::new,
-      SenderIdMonitor::createSenderIdMonitor);
+      SenderIdMonitor::createSenderIdMonitor,
+      partitionedRegion -> new PRHARedundancyProvider(partitionedRegion, cache.getInternalResourceManager()),
+      partitionedRegion -> new PartitionedRegionDataStore(partitionedRegion, statisticsClock));
   }
 
   public PartitionedRegion(
@@ -813,10 +816,13 @@ public class PartitionedRegion extends LocalRegion
     Node node,
     InternalDistributedSystem system,
     PartitionedRegionStats.Factory partitionedRegionStatsFactory,
-    SenderIdMonitor.Factory senderIdMonitorFactory) {
+    SenderIdMonitor.Factory senderIdMonitorFactory,
+    RedundancyProviderFactory redundancyProviderFactory,
+    DataStoreFactory dataStoreFactory) {
     super(regionName, regionAttributes, parentRegion, cache, internalRegionArgs,
         partitionedRegionDataView, statisticsClock);
 
+    this.dataStoreFactory = dataStoreFactory;
     this.colocationLoggerFactory = colocationLoggerFactory;
     this.node = node;
     this.prStats = partitionedRegionStatsFactory.create(system, getFullPath(), statisticsClock);
@@ -843,7 +849,7 @@ public class PartitionedRegion extends LocalRegion
     this.distAdvisor = regionAdvisorFactory.create(this);
     senderIdMonitor = senderIdMonitorFactory.create(this, this.distAdvisor);
     // Warning: potential early escape of instance
-    this.redundancyProvider = new PRHARedundancyProvider(this, cache.getInternalResourceManager());
+    this.redundancyProvider = redundancyProviderFactory.create(this);
 
     this.redundantCopies = regionAttributes.getPartitionAttributes().getRedundantCopies();
     this.redundancyTracker = new PartitionedRegionRedundancyTracker(this.totalNumberOfBuckets,
@@ -1067,7 +1073,8 @@ public class PartitionedRegion extends LocalRegion
     // If localMaxMemory is set to 0, do not initialize Data Store.
     final boolean storesData = this.localMaxMemory > 0;
     if (storesData) {
-      initializeDataStore(this.getAttributes());
+      this.getAttributes();
+      this.dataStore = dataStoreFactory.create(this);
     }
 
     // register this PartitionedRegion, Create a PartitionRegionConfig and bind
@@ -1378,18 +1385,6 @@ public class PartitionedRegion extends LocalRegion
           callback, true, profile.peerMemberId);
       dispatchListenerEvent(EnumListenerEvent.AFTER_REMOTE_REGION_CREATE, event);
     }
-  }
-
-  /**
-   * This method initializes the partitionedRegionDataStore for this PR.
-   *
-   * @param ra Region attributes
-   */
-  private void initializeDataStore(RegionAttributes ra) {
-
-    this.dataStore =
-        PartitionedRegionDataStore.createDataStore(cache, this, ra.getPartitionAttributes(),
-            getStatisticsClock());
   }
 
   protected DistributedLockService getPartitionedRegionLockService() {
@@ -10149,5 +10144,13 @@ public class PartitionedRegion extends LocalRegion
 
   public boolean areRecoveriesInProgress() {
     return prStats.getRecoveriesInProgress() > 0;
+  }
+
+  public interface RedundancyProviderFactory {
+    PRHARedundancyProvider create(PartitionedRegion region);
+  }
+
+  public interface DataStoreFactory {
+    PartitionedRegionDataStore create(PartitionedRegion region);
   }
 }

@@ -91,7 +91,10 @@ public class PartitionedRegionCacheCallbackTest {
       new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
         mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
         regionAdvisorFactory, internalDataView, node, system, partitionedRegionStatsFactory,
-        senderIdMonitorFactory);
+        senderIdMonitorFactory,
+        pr -> new PRHARedundancyProvider(pr, cache.getInternalResourceManager()),
+        pr -> new PartitionedRegionDataStore(pr, disabledClock())
+      );
   }
 
   @SuppressWarnings("unused")
