@@ -134,7 +134,8 @@ public class PartitionRegionVirtualPutTest {
   }
 
   @Test
-  public void createsLocallyIfIfNew() throws ForceReattemptException, ClassNotFoundException {
+  public void ifPRHasDataStore_createsLocally_ifIfNew()
+      throws ForceReattemptException, ClassNotFoundException {
     BucketRegion bucketRegion = mock(BucketRegion.class);
     EntryEventImpl event = mock(EntryEventImpl.class);
 
@@ -142,10 +143,11 @@ public class PartitionRegionVirtualPutTest {
         .thenReturn("event-key");
     when(event.getKeyInfo())
         .thenReturn(mock(KeyInfo.class));
+
     when(dataStore.getInitializedBucketForId(any(), any()))
         .thenReturn(bucketRegion);
 
-    boolean ifNew = true; // To route the put to dataStore.createLocally() instead of putLocally()
+    boolean ifNew = true;
     long lastModified = 9; // Ignored because ifNew == true
     boolean ifOld = false;
     Object expectedOldValue = null;
@@ -162,5 +164,42 @@ public class PartitionRegionVirtualPutTest {
     verify(dataStore)
         .createLocally(same(bucketRegion), same(event), eq(ifNew), eq(ifOld), eq(requireOldValue),
             eq(0L));
+  }
+
+  @Test
+  public void ifPRHasDataStore_putsLocally_ifNotIfNew()
+      throws ForceReattemptException, ClassNotFoundException {
+    BucketRegion bucketRegion = mock(BucketRegion.class);
+    EntryEventImpl event = mock(EntryEventImpl.class);
+
+    when(event.getKey())
+        .thenReturn("event-key");
+    when(event.getKeyInfo())
+        .thenReturn(mock(KeyInfo.class));
+
+    when(dataStore.getInitializedBucketForId(any(), any()))
+        .thenReturn(bucketRegion);
+    when(dataStore.putLocally(
+        same(bucketRegion), same(event), anyBoolean(), anyBoolean(), any(), anyBoolean(),
+        anyLong()))
+            .thenReturn(true);
+
+    boolean ifNew = false;
+    long lastModified = 9;
+    boolean ifOld = false;
+    Object expectedOldValue = "expected old value";
+    boolean requireOldValue = false;
+    boolean overwriteDestroyed = false;
+    boolean invokeCallbacks = false;
+    boolean throwConcurrentModification = false;
+
+    region.initialize(null, null, null);
+
+    region.virtualPut(event, ifNew, ifOld, expectedOldValue, requireOldValue, lastModified,
+        overwriteDestroyed, invokeCallbacks, throwConcurrentModification);
+
+    verify(dataStore)
+        .putLocally(same(bucketRegion), same(event), eq(ifNew), eq(ifOld), eq(expectedOldValue),
+            eq(requireOldValue), eq(lastModified));
   }
 }
