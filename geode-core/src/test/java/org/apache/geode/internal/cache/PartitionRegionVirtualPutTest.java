@@ -30,10 +30,9 @@ import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.locks.DLockService;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
-import org.apache.geode.internal.cache.PartitionedRegion.DataStoreFactory;
-import org.apache.geode.internal.cache.PartitionedRegion.RedundancyProviderFactory;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
+import org.apache.geode.internal.cache.partitioned.RegionAdvisorFactory;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
 
 public class PartitionRegionVirtualPutTest {
@@ -51,85 +50,87 @@ public class PartitionRegionVirtualPutTest {
   @Before
   public void setUp() {
     ColocationLoggerFactory colocationLoggerFactory = mock(ColocationLoggerFactory.class);
-    DataStoreFactory dataStoreFactory = mock(DataStoreFactory.class);
+    PartitionedRegionDataStoreFactory dataStoreFactory =
+        mock(PartitionedRegionDataStoreFactory.class);
     InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
     DistributionManager distributionManager = mock(DistributionManager.class);
     InternalDataView internalDataView = mock(InternalDataView.class);
     DLockService lockService = mock(DLockService.class);
     Node node = mock(Node.class);
-    PartitionedRegionStats.Factory partitionedRegionStatsFactory =
-      mock(PartitionedRegionStats.Factory.class);
-    RedundancyProviderFactory redundancyProviderFactory = mock(RedundancyProviderFactory.class);
+    PartitionedRegionStatsFactory partitionedRegionStatsFactory =
+        mock(PartitionedRegionStatsFactory.class);
+    PRHARedundancyProviderFactory redundancyProviderFactory =
+        mock(PRHARedundancyProviderFactory.class);
     PRHARedundancyProvider redundancyProvider = mock(PRHARedundancyProvider.class);
     InternalResourceManager resourceManager = mock(InternalResourceManager.class);
-    RegionAdvisor.Factory regionAdvisorFactory = mock(RegionAdvisor.Factory.class);
+    RegionAdvisorFactory regionAdvisorFactory = mock(RegionAdvisorFactory.class);
     RegionAdvisor regionAdvisor = mock(RegionAdvisor.class);
     DistributedRegion rootRegion = uncheckedCast(mock(DistributedRegion.class));
-    SenderIdMonitor.Factory senderIdMonitorFactory = mock(SenderIdMonitor.Factory.class);
+    SenderIdMonitorFactory senderIdMonitorFactory = mock(SenderIdMonitorFactory.class);
     InternalDistributedSystem system = mock(InternalDistributedSystem.class);
 
     AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
     PartitionAttributes<?, ?> partitionAttributes = new PartitionAttributesFactory<>()
-      // TODO: Move this to the test, because it determines whether there's local storage.
-      .setLocalMaxMemory(1)
-      .create();
+        // TODO: Move this to the test, because it determines whether there's local storage.
+        .setLocalMaxMemory(1)
+        .create();
     attributesFactory.setPartitionAttributes(partitionAttributes);
 
     when(cache.getCancelCriterion())
-      .thenReturn(mock(CancelCriterion.class));
+        .thenReturn(mock(CancelCriterion.class));
     when(cache.getCachePerfStats())
-      .thenReturn(mock(CachePerfStats.class));
+        .thenReturn(mock(CachePerfStats.class));
     when(cache.getDistributedSystem())
-      .thenReturn(system);
+        .thenReturn(system);
     when(cache.getInternalDistributedSystem())
-      .thenReturn(system);
+        .thenReturn(system);
     when(cache.getInternalResourceManager())
-      .thenReturn(resourceManager);
+        .thenReturn(resourceManager);
     when(cache.getPartitionedRegionLockService())
-      .thenReturn(lockService);
+        .thenReturn(lockService);
     when(cache.getRegion(eq(PartitionedRegionHelper.PR_ROOT_REGION_NAME), anyBoolean()))
-      .thenReturn(rootRegion);
+        .thenReturn(rootRegion);
 
     when(dataStoreFactory.create(any()))
-      .thenReturn(dataStore);
+        .thenReturn(dataStore);
 
     when(distributionManager.getCancelCriterion())
-      .thenReturn(mock(CancelCriterion.class));
+        .thenReturn(mock(CancelCriterion.class));
     when(distributionManager.getConfig())
-      .thenReturn(mock(DistributionConfig.class));
+        .thenReturn(mock(DistributionConfig.class));
     when(distributionManager.getId())
-      .thenReturn(distributedMember);
+        .thenReturn(distributedMember);
 
     when(lockService.lock(any(), anyLong(), anyLong()))
-      .thenReturn(true);
+        .thenReturn(true);
     when(lockService.lock(any(), anyLong(), anyLong(), anyBoolean(), anyBoolean(), anyBoolean()))
-      .thenReturn(true);
-    when(partitionedRegionStatsFactory.create(any(), any(), any()))
-      .thenReturn(mock(PartitionedRegionStats.class));
+        .thenReturn(true);
+    when(partitionedRegionStatsFactory.create(any()))
+        .thenReturn(mock(PartitionedRegionStats.class));
 
     when(redundancyProviderFactory.create(any()))
-      .thenReturn(redundancyProvider);
+        .thenReturn(redundancyProvider);
     when(redundancyProvider.createBucketAtomically(anyInt(), anyInt(), anyBoolean(), any()))
-      .thenReturn(distributedMember);
+        .thenReturn(distributedMember);
 
     when(regionAdvisorFactory.create(any()))
-      .thenReturn(regionAdvisor);
+        .thenReturn(regionAdvisor);
 
     when(rootRegion.getDistributionAdvisor())
-      .thenReturn(mock(CacheDistributionAdvisor.class));
+        .thenReturn(mock(CacheDistributionAdvisor.class));
 
     when(system.getClock())
-      .thenReturn(mock(DSClock.class));
+        .thenReturn(mock(DSClock.class));
     when(system.getDistributedMember())
-      .thenReturn(distributedMember);
+        .thenReturn(distributedMember);
     when(system.getDistributionManager())
-      .thenReturn(distributionManager);
+        .thenReturn(distributionManager);
 
     region = new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
-      mock(InternalRegionArguments.class), disabledClock(), colocationLoggerFactory,
-      regionAdvisorFactory, internalDataView, node, system,
-      partitionedRegionStatsFactory, senderIdMonitorFactory,
-      redundancyProviderFactory, dataStoreFactory);
+        mock(InternalRegionArguments.class), disabledClock(), colocationLoggerFactory,
+        regionAdvisorFactory, internalDataView, node, system,
+        partitionedRegionStatsFactory, senderIdMonitorFactory,
+        redundancyProviderFactory, dataStoreFactory);
   }
 
   @Test
@@ -138,11 +139,11 @@ public class PartitionRegionVirtualPutTest {
     EntryEventImpl event = mock(EntryEventImpl.class);
 
     when(event.getKey())
-      .thenReturn("event-key");
+        .thenReturn("event-key");
     when(event.getKeyInfo())
-      .thenReturn(mock(KeyInfo.class));
+        .thenReturn(mock(KeyInfo.class));
     when(dataStore.getInitializedBucketForId(any(), any()))
-      .thenReturn(bucketRegion);
+        .thenReturn(bucketRegion);
 
     boolean ifNew = true; // To route the put to dataStore.createLocally() instead of putLocally()
     long lastModified = 9; // Ignored because ifNew == true
@@ -156,10 +157,10 @@ public class PartitionRegionVirtualPutTest {
     region.initialize(null, null, null);
 
     region.virtualPut(event, ifNew, ifOld, expectedOldValue, requireOldValue, lastModified,
-      overwriteDestroyed, invokeCallbacks, throwConcurrentModification);
+        overwriteDestroyed, invokeCallbacks, throwConcurrentModification);
 
     verify(dataStore)
-      .createLocally(same(bucketRegion), same(event), eq(ifNew), eq(ifOld), eq(requireOldValue),
-        eq(0L));
+        .createLocally(same(bucketRegion), same(event), eq(ifNew), eq(ifOld), eq(requireOldValue),
+            eq(0L));
   }
 }

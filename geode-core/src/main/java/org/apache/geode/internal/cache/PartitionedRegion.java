@@ -220,6 +220,7 @@ import org.apache.geode.internal.cache.partitioned.PutMessage;
 import org.apache.geode.internal.cache.partitioned.PutMessage.PutResult;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisor.PartitionProfile;
+import org.apache.geode.internal.cache.partitioned.RegionAdvisorFactory;
 import org.apache.geode.internal.cache.partitioned.RemoveAllPRMessage;
 import org.apache.geode.internal.cache.partitioned.RemoveIndexesMessage;
 import org.apache.geode.internal.cache.partitioned.SizeMessage;
@@ -318,7 +319,7 @@ public class PartitionedRegion extends LocalRegion
       return i;
     }
   };
-  private final DataStoreFactory dataStoreFactory;
+  private final PartitionedRegionDataStoreFactory dataStoreFactory;
 
   /**
    * Global Region for storing PR config ( PRName->PRConfig). This region would be used to resolve
@@ -778,54 +779,56 @@ public class PartitionedRegion extends LocalRegion
    * and also by invoking Cache.createRegion(). (Cache.xml etc to be added)
    */
   public PartitionedRegion(
-    String regionName,
-    RegionAttributes regionAttributes,
-    LocalRegion parentRegion,
-    InternalCache cache,
-    InternalRegionArguments internalRegionArgs,
-    StatisticsClock statisticsClock,
-    ColocationLoggerFactory colocationLoggerFactory) {
+      String regionName,
+      RegionAttributes regionAttributes,
+      LocalRegion parentRegion,
+      InternalCache cache,
+      InternalRegionArguments internalRegionArgs,
+      StatisticsClock statisticsClock,
+      ColocationLoggerFactory colocationLoggerFactory) {
     this(
-      regionName,
-      regionAttributes,
-      parentRegion,
-      cache,
-      internalRegionArgs,
-      statisticsClock,
-      colocationLoggerFactory,
-      RegionAdvisor::createRegionAdvisor,
-      new PartitionedRegionDataView(),
-      new Node(cache.getDistributionManager().getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement()),
-      cache.getInternalDistributedSystem(),
-      PartitionedRegionStats::new,
-      SenderIdMonitor::createSenderIdMonitor,
-      partitionedRegion -> new PRHARedundancyProvider(partitionedRegion, cache.getInternalResourceManager()),
-      partitionedRegion -> new PartitionedRegionDataStore(partitionedRegion, statisticsClock));
+        regionName,
+        regionAttributes,
+        parentRegion,
+        cache,
+        internalRegionArgs,
+        statisticsClock,
+        colocationLoggerFactory,
+        RegionAdvisor::createRegionAdvisor,
+        new PartitionedRegionDataView(),
+        new Node(cache.getDistributionManager().getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement()),
+        cache.getInternalDistributedSystem(),
+        name -> new PartitionedRegionStats(cache.getInternalDistributedSystem(), name,
+            statisticsClock),
+        SenderIdMonitor::createSenderIdMonitor,
+        partitionedRegion -> new PRHARedundancyProvider(partitionedRegion,
+            cache.getInternalResourceManager()),
+        partitionedRegion -> new PartitionedRegionDataStore(partitionedRegion, statisticsClock));
   }
 
   public PartitionedRegion(
-    String regionName,
-    RegionAttributes regionAttributes,
-    LocalRegion parentRegion,
-    InternalCache cache,
-    InternalRegionArguments internalRegionArgs,
-    StatisticsClock statisticsClock,
-    ColocationLoggerFactory colocationLoggerFactory,
-    RegionAdvisor.Factory regionAdvisorFactory,
-    InternalDataView partitionedRegionDataView,
-    Node node,
-    InternalDistributedSystem system,
-    PartitionedRegionStats.Factory partitionedRegionStatsFactory,
-    SenderIdMonitor.Factory senderIdMonitorFactory,
-    RedundancyProviderFactory redundancyProviderFactory,
-    DataStoreFactory dataStoreFactory) {
+      String regionName,
+      RegionAttributes regionAttributes,
+      LocalRegion parentRegion,
+      InternalCache cache,
+      InternalRegionArguments internalRegionArgs,
+      StatisticsClock statisticsClock,
+      ColocationLoggerFactory colocationLoggerFactory,
+      RegionAdvisorFactory regionAdvisorFactory,
+      InternalDataView partitionedRegionDataView,
+      Node node,
+      InternalDistributedSystem system,
+      PartitionedRegionStatsFactory partitionedRegionStatsFactory,
+      SenderIdMonitorFactory senderIdMonitorFactory,
+      PRHARedundancyProviderFactory redundancyProviderFactory,
+      PartitionedRegionDataStoreFactory dataStoreFactory) {
     super(regionName, regionAttributes, parentRegion, cache, internalRegionArgs,
         partitionedRegionDataView, statisticsClock);
 
     this.dataStoreFactory = dataStoreFactory;
     this.colocationLoggerFactory = colocationLoggerFactory;
     this.node = node;
-    this.prStats = partitionedRegionStatsFactory.create(system, getFullPath(), statisticsClock);
+    this.prStats = partitionedRegionStatsFactory.create(getFullPath());
     this.regionIdentifier = getFullPath().replace(Region.SEPARATOR_CHAR, '#');
 
     if (logger.isDebugEnabled()) {
@@ -847,6 +850,7 @@ public class PartitionedRegion extends LocalRegion
 
     // Warning: potential early escape of instance
     this.distAdvisor = regionAdvisorFactory.create(this);
+    // Warning: potential early escape of instance
     senderIdMonitor = senderIdMonitorFactory.create(this, this.distAdvisor);
     // Warning: potential early escape of instance
     this.redundancyProvider = redundancyProviderFactory.create(this);
@@ -10146,11 +10150,4 @@ public class PartitionedRegion extends LocalRegion
     return prStats.getRecoveriesInProgress() > 0;
   }
 
-  public interface RedundancyProviderFactory {
-    PRHARedundancyProvider create(PartitionedRegion region);
-  }
-
-  public interface DataStoreFactory {
-    PartitionedRegionDataStore create(PartitionedRegion region);
-  }
 }

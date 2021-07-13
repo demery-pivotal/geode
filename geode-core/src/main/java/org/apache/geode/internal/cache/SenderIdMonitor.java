@@ -35,11 +35,6 @@ public class SenderIdMonitor implements ProfileListener, InitializationListener 
   private boolean gatewaySenderIdsDifferWarningMessage;
   private boolean asyncQueueIdsDifferWarningMessage;
 
-  @FunctionalInterface
-  public interface Factory {
-    SenderIdMonitor create(InternalRegion region, CacheDistributionAdvisor advisor);
-  }
-
   private SenderIdMonitor(InternalRegion region, CacheDistributionAdvisor advisor) {
     this.region = region;
     this.advisor = advisor;

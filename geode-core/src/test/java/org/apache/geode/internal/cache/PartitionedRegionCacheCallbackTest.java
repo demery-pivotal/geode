@@ -37,7 +37,7 @@ import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
-import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
+import org.apache.geode.internal.cache.partitioned.RegionAdvisorFactory;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
 
 @RunWith(JUnitParamsRunner.class)
@@ -58,54 +58,53 @@ public class PartitionedRegionCacheCallbackTest {
     DistributionManager distributionManager = mock(DistributionManager.class);
     InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
     InternalDataView internalDataView = mock(InternalDataView.class);
-    PartitionedRegionStats.Factory partitionedRegionStatsFactory =
-      mock(PartitionedRegionStats.Factory.class);
-    RegionAdvisor.Factory regionAdvisorFactory = mock(RegionAdvisor.Factory.class);
+    PartitionedRegionStatsFactory partitionedRegionStatsFactory =
+        mock(PartitionedRegionStatsFactory.class);
+    RegionAdvisorFactory regionAdvisorFactory = mock(RegionAdvisorFactory.class);
     InternalResourceManager resourceManager = mock(InternalResourceManager.class);
-    SenderIdMonitor.Factory senderIdMonitorFactory = mock(SenderIdMonitor.Factory.class);
+    SenderIdMonitorFactory senderIdMonitorFactory = mock(SenderIdMonitorFactory.class);
     InternalDistributedSystem system = mock(InternalDistributedSystem.class);
 
-    PartitionAttributes<?,?> partitionAttributes =
-      new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
-    AttributesFactory<?,?> attributesFactory = new AttributesFactory<>();
+    PartitionAttributes<?, ?> partitionAttributes =
+        new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
+    AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
     attributesFactory.setPartitionAttributes(partitionAttributes);
 
     when(cache.getInternalDistributedSystem())
-      .thenReturn(system);
+        .thenReturn(system);
     when(cache.getInternalResourceManager())
-      .thenReturn(resourceManager);
-    when(partitionedRegionStatsFactory.create(any(), any(), any()))
-      .thenReturn(mock(PartitionedRegionStats.class));
+        .thenReturn(resourceManager);
+    when(partitionedRegionStatsFactory.create(any()))
+        .thenReturn(mock(PartitionedRegionStats.class));
     when(system.getClock())
-      .thenReturn(mock(DSClock.class));
+        .thenReturn(mock(DSClock.class));
     when(system.getDistributedMember())
-      .thenReturn(distributedMember);
+        .thenReturn(distributedMember);
     when(system.getDistributionManager())
-      .thenReturn(distributionManager);
+        .thenReturn(distributionManager);
     when(distributionManager.getId())
-      .thenReturn(distributedMember);
+        .thenReturn(distributedMember);
 
     Node node = new Node(distributionManager.getId(), SERIAL_NUMBER_GENERATOR.getAndIncrement());
 
     partitionedRegion =
-      new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
-        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
-        regionAdvisorFactory, internalDataView, node, system, partitionedRegionStatsFactory,
-        senderIdMonitorFactory,
-        pr -> new PRHARedundancyProvider(pr, cache.getInternalResourceManager()),
-        pr -> new PartitionedRegionDataStore(pr, disabledClock())
-      );
+        new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
+            mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
+            regionAdvisorFactory, internalDataView, node, system, partitionedRegionStatsFactory,
+            senderIdMonitorFactory,
+            pr -> new PRHARedundancyProvider(pr, cache.getInternalResourceManager()),
+            pr -> new PartitionedRegionDataStore(pr, disabledClock()));
   }
 
   @SuppressWarnings("unused")
   private Object[] cacheLoaderAndWriter() {
     CacheLoader<?, ?> mockLoader = mock(CacheLoader.class);
     CacheWriter<?, ?> mockWriter = mock(CacheWriter.class);
-    return new Object[]{
-      new Object[]{mockLoader, null},
-      new Object[]{null, mockWriter},
-      new Object[]{mockLoader, mockWriter},
-      new Object[]{null, null}
+    return new Object[] {
+        new Object[] {mockLoader, null},
+        new Object[] {null, mockWriter},
+        new Object[] {mockLoader, mockWriter},
+        new Object[] {null, null}
     };
   }
 
@@ -113,11 +112,11 @@ public class PartitionedRegionCacheCallbackTest {
   @Parameters(method = "cacheLoaderAndWriter")
   @TestCaseName("{method}(CacheLoader={0}, CacheWriter={1})")
   public void verifyPRConfigUpdatedAfterLoaderUpdate(CacheLoader<?, ?> cacheLoader,
-    CacheWriter<?, ?> cacheWriter) {
+      CacheWriter<?, ?> cacheWriter) {
     // ARRANGE
     PartitionRegionConfig partitionRegionConfig = mock(PartitionRegionConfig.class);
     Region<String, PartitionRegionConfig> partitionedRegionRoot =
-      uncheckedCast(mock(InternalRegion.class));
+        uncheckedCast(mock(InternalRegion.class));
     PartitionedRegion.RegionLock regionLock = mock(PartitionedRegion.RegionLock.class);
     PartitionedRegion spyPartitionedRegion = spy(partitionedRegion);
     InternalDistributedMember ourMember = spyPartitionedRegion.getDistributionManager().getId();
@@ -128,35 +127,35 @@ public class PartitionedRegionCacheCallbackTest {
     Node otherNode2 = mock(Node.class, "otherNode2");
 
     when(otherNode1.getMemberId())
-      .thenReturn(otherMember1);
+        .thenReturn(otherMember1);
     when(otherNode2.getMemberId())
-      .thenReturn(otherMember2);
+        .thenReturn(otherMember2);
     when(ourNode.getMemberId())
-      .thenReturn(ourMember);
+        .thenReturn(ourMember);
     when(ourNode.isCacheLoaderAttached())
-      .thenReturn(cacheLoader != null);
+        .thenReturn(cacheLoader != null);
     when(ourNode.isCacheWriterAttached())
-      .thenReturn(cacheWriter != null);
+        .thenReturn(cacheWriter != null);
     when(partitionRegionConfig.getNodes())
-      .thenReturn(new HashSet<>(asList(otherNode1, ourNode, otherNode2)));
+        .thenReturn(new HashSet<>(asList(otherNode1, ourNode, otherNode2)));
     when(partitionedRegionRoot.get(spyPartitionedRegion.getRegionIdentifier()))
-      .thenReturn(partitionRegionConfig);
+        .thenReturn(partitionRegionConfig);
     when(spyPartitionedRegion.getPRRoot())
-      .thenReturn(partitionedRegionRoot);
+        .thenReturn(partitionedRegionRoot);
 
     doReturn(cacheLoader)
-      .when(spyPartitionedRegion).basicGetLoader();
+        .when(spyPartitionedRegion).basicGetLoader();
     doReturn(cacheWriter)
-      .when(spyPartitionedRegion).basicGetWriter();
+        .when(spyPartitionedRegion).basicGetWriter();
     doReturn(regionLock)
-      .when(spyPartitionedRegion).getRegionLock();
+        .when(spyPartitionedRegion).getRegionLock();
 
     // ACT
     spyPartitionedRegion.updatePRNodeInformation();
 
     // ASSERT
     assertThat(partitionRegionConfig.getNodes())
-      .contains(ourNode);
+        .contains(ourNode);
 
     Node verifyOurNode = null;
     for (Node node : partitionRegionConfig.getNodes()) {
@@ -165,19 +164,19 @@ public class PartitionedRegionCacheCallbackTest {
       }
     }
     assertThat(verifyOurNode)
-      .withFailMessage("Failed to find " + ourMember + " in " + partitionRegionConfig.getNodes())
-      .isNotNull();
+        .withFailMessage("Failed to find " + ourMember + " in " + partitionRegionConfig.getNodes())
+        .isNotNull();
 
     verify(partitionedRegionRoot)
-      .get(spyPartitionedRegion.getRegionIdentifier());
+        .get(spyPartitionedRegion.getRegionIdentifier());
     verify(partitionedRegionRoot)
-      .put(spyPartitionedRegion.getRegionIdentifier(), partitionRegionConfig);
+        .put(spyPartitionedRegion.getRegionIdentifier(), partitionRegionConfig);
     verify(spyPartitionedRegion)
-      .updatePRConfig(partitionRegionConfig, false);
+        .updatePRConfig(partitionRegionConfig, false);
 
     assertThat(verifyOurNode.isCacheLoaderAttached())
-      .isEqualTo(cacheLoader != null);
+        .isEqualTo(cacheLoader != null);
     assertThat(verifyOurNode.isCacheWriterAttached())
-      .isEqualTo(cacheWriter != null);
+        .isEqualTo(cacheWriter != null);
   }
 }

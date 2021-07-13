@@ -18,8 +18,6 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.commons.lang3.function.TriFunction;
-
 import org.apache.geode.StatisticDescriptor;
 import org.apache.geode.Statistics;
 import org.apache.geode.StatisticsFactory;
@@ -47,11 +45,6 @@ import org.apache.geode.internal.statistics.StatisticsTypeFactoryImpl;
  * @since GemFire 5.0
  */
 public class PartitionedRegionStats {
-  @FunctionalInterface
-  public interface Factory {
-    PartitionedRegionStats create(StatisticsFactory statisticsFactory, String name,
-      StatisticsClock clock);
-  }
 
   @Immutable
   private static final StatisticsType type;

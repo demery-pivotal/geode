@@ -103,11 +103,6 @@ public class RegionAdvisor extends CacheDistributionAdvisor {
 
   private ConcurrentHashMap<Integer, Set<ServerBucketProfile>> clientBucketProfilesMap;
 
-  @FunctionalInterface
-  public interface Factory {
-    RegionAdvisor create(PartitionedRegion region);
-  }
-
   public static RegionAdvisor createRegionAdvisor(PartitionedRegion region) {
     RegionAdvisor advisor = new RegionAdvisor(region);
     advisor.initialize();

@@ -62,9 +62,8 @@ import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
-import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
+import org.apache.geode.internal.cache.partitioned.RegionAdvisorFactory;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
-import org.apache.geode.internal.statistics.StatisticsClock;
 
 public class PartitionedRegionTest {
 
@@ -85,13 +84,13 @@ public class PartitionedRegionTest {
     InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
     InternalDataView internalDataView = mock(InternalDataView.class);
     InternalResourceManager resourceManager = mock(InternalResourceManager.class);
-    PartitionedRegionStats.Factory partitionedRegionStatsFactory =
-      mock(PartitionedRegionStats.Factory.class);
-    RegionAdvisor.Factory regionAdvisorFactory = mock(RegionAdvisor.Factory.class);
-    SenderIdMonitor.Factory senderIdMonitorFactory = mock(SenderIdMonitor.Factory.class);
+    PartitionedRegionStatsFactory partitionedRegionStatsFactory =
+        mock(PartitionedRegionStatsFactory.class);
+    RegionAdvisorFactory regionAdvisorFactory = mock(RegionAdvisorFactory.class);
+    SenderIdMonitorFactory senderIdMonitorFactory = mock(SenderIdMonitorFactory.class);
 
-    PartitionAttributes<?,?> partitionAttributes =
-      new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
+    PartitionAttributes<?, ?> partitionAttributes =
+        new PartitionAttributesFactory<>().setTotalNumBuckets(1).setRedundantCopies(1).create();
     AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
     attributesFactory.setPartitionAttributes(partitionAttributes);
 
@@ -99,8 +98,8 @@ public class PartitionedRegionTest {
         .thenReturn(system);
     when(cache.getInternalResourceManager())
         .thenReturn(resourceManager);
-    when(partitionedRegionStatsFactory.create(any(), any(), any()))
-      .thenReturn(mock(PartitionedRegionStats.class));
+    when(partitionedRegionStatsFactory.create(any()))
+        .thenReturn(mock(PartitionedRegionStats.class));
     when(system.getClock())
         .thenReturn(mock(DSClock.class));
     when(system.getDistributedMember())
@@ -109,13 +108,12 @@ public class PartitionedRegionTest {
         .thenReturn(distributionManager);
 
     partitionedRegion =
-      new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
-        mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
-        regionAdvisorFactory, internalDataView, null /* Node*/, system,
-        partitionedRegionStatsFactory, senderIdMonitorFactory,
-        pr -> new PRHARedundancyProvider(pr, cache.getInternalResourceManager()),
-        pr -> new PartitionedRegionDataStore(pr, disabledClock())
-      );
+        new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
+            mock(InternalRegionArguments.class), disabledClock(), ColocationLoggerFactory.create(),
+            regionAdvisorFactory, internalDataView, null /* Node */, system,
+            partitionedRegionStatsFactory, senderIdMonitorFactory,
+            pr -> new PRHARedundancyProvider(pr, cache.getInternalResourceManager()),
+            pr -> new PartitionedRegionDataStore(pr, disabledClock()));
   }
 
   @Test
