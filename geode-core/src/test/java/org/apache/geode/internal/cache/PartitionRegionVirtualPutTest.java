@@ -1,5 +1,6 @@
 package org.apache.geode.internal.cache;
 
+import static org.apache.geode.internal.cache.PartitionedRegionHelper.PR_ROOT_REGION_NAME;
 import static org.apache.geode.internal.statistics.StatisticsClockFactory.disabledClock;
 import static org.apache.geode.util.internal.UncheckedUtils.uncheckedCast;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,40 +42,28 @@ public class PartitionRegionVirtualPutTest {
 
   @Mock
   InternalCache cache;
-
   @Mock
   PartitionedRegionDataStore dataStore;
-
-  private PartitionedRegion region;
+  @Mock
+  RegionAdvisorFactory regionAdvisorFactory;
+  @Mock
+  PartitionedRegionDataStoreFactory dataStoreFactory;
+  @Mock
+  PartitionedRegionStatsFactory partitionedRegionStatsFactory;
+  @Mock
+  PRHARedundancyProviderFactory redundancyProviderFactory;
+  @Mock
+  InternalDistributedSystem system;
 
   @Before
   public void setUp() {
-    ColocationLoggerFactory colocationLoggerFactory = mock(ColocationLoggerFactory.class);
-    PartitionedRegionDataStoreFactory dataStoreFactory =
-        mock(PartitionedRegionDataStoreFactory.class);
-    InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
     DistributionManager distributionManager = mock(DistributionManager.class);
-    InternalDataView internalDataView = mock(InternalDataView.class);
+    InternalDistributedMember distributedMember = mock(InternalDistributedMember.class);
     DLockService lockService = mock(DLockService.class);
-    Node node = mock(Node.class);
-    PartitionedRegionStatsFactory partitionedRegionStatsFactory =
-        mock(PartitionedRegionStatsFactory.class);
-    PRHARedundancyProviderFactory redundancyProviderFactory =
-        mock(PRHARedundancyProviderFactory.class);
     PRHARedundancyProvider redundancyProvider = mock(PRHARedundancyProvider.class);
-    InternalResourceManager resourceManager = mock(InternalResourceManager.class);
-    RegionAdvisorFactory regionAdvisorFactory = mock(RegionAdvisorFactory.class);
     RegionAdvisor regionAdvisor = mock(RegionAdvisor.class);
+    InternalResourceManager resourceManager = mock(InternalResourceManager.class);
     DistributedRegion rootRegion = uncheckedCast(mock(DistributedRegion.class));
-    SenderIdMonitorFactory senderIdMonitorFactory = mock(SenderIdMonitorFactory.class);
-    InternalDistributedSystem system = mock(InternalDistributedSystem.class);
-
-    AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
-    PartitionAttributes<?, ?> partitionAttributes = new PartitionAttributesFactory<>()
-        // TODO: Move this to the test, because it determines whether there's local storage.
-        .setLocalMaxMemory(1)
-        .create();
-    attributesFactory.setPartitionAttributes(partitionAttributes);
 
     when(cache.getCancelCriterion())
         .thenReturn(mock(CancelCriterion.class));
@@ -88,7 +77,7 @@ public class PartitionRegionVirtualPutTest {
         .thenReturn(resourceManager);
     when(cache.getPartitionedRegionLockService())
         .thenReturn(lockService);
-    when(cache.getRegion(eq(PartitionedRegionHelper.PR_ROOT_REGION_NAME), anyBoolean()))
+    when(cache.getRegion(eq(PR_ROOT_REGION_NAME), anyBoolean()))
         .thenReturn(rootRegion);
 
     when(dataStoreFactory.create(any()))
@@ -105,13 +94,14 @@ public class PartitionRegionVirtualPutTest {
         .thenReturn(true);
     when(lockService.lock(any(), anyLong(), anyLong(), anyBoolean(), anyBoolean(), anyBoolean()))
         .thenReturn(true);
+
     when(partitionedRegionStatsFactory.create(any()))
         .thenReturn(mock(PartitionedRegionStats.class));
 
-    when(redundancyProviderFactory.create(any()))
-        .thenReturn(redundancyProvider);
     when(redundancyProvider.createBucketAtomically(anyInt(), anyInt(), anyBoolean(), any()))
         .thenReturn(distributedMember);
+    when(redundancyProviderFactory.create(any()))
+        .thenReturn(redundancyProvider);
 
     when(regionAdvisorFactory.create(any()))
         .thenReturn(regionAdvisor);
@@ -125,81 +115,95 @@ public class PartitionRegionVirtualPutTest {
         .thenReturn(distributedMember);
     when(system.getDistributionManager())
         .thenReturn(distributionManager);
-
-    region = new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
-        mock(InternalRegionArguments.class), disabledClock(), colocationLoggerFactory,
-        regionAdvisorFactory, internalDataView, node, system,
-        partitionedRegionStatsFactory, senderIdMonitorFactory,
-        redundancyProviderFactory, dataStoreFactory);
   }
 
   @Test
-  public void ifPRHasDataStore_createsLocally_ifIfNew()
+  public void ifPRHasDataStore_createsLocally_ifOkToCreateEntry()
       throws ForceReattemptException, ClassNotFoundException {
-    BucketRegion bucketRegion = mock(BucketRegion.class);
-    EntryEventImpl event = mock(EntryEventImpl.class);
+    Integer bucketId = 12;
+    String key = "create-event-key";
+    PartitionedRegion region = initializePartitionedRegion(true);
+    EntryEventImpl event = createEntryEvent(key, bucketId);
+    BucketRegion bucketRegion = createBucketForEntryEvent(event);
 
-    when(event.getKey())
-        .thenReturn("event-key");
-    when(event.getKeyInfo())
-        .thenReturn(mock(KeyInfo.class));
-
-    when(dataStore.getInitializedBucketForId(any(), any()))
-        .thenReturn(bucketRegion);
-
-    boolean ifNew = true;
-    long lastModified = 9; // Ignored because ifNew == true
-    boolean ifOld = false;
-    Object expectedOldValue = null;
+    boolean isOkToCreateEntry = true;
+    long lastModified = 9; // Ignored because isOkToCreateEntry == true
+    boolean isOkToUpdateEntry = false;
     boolean requireOldValue = false;
-    boolean overwriteDestroyed = false;
-    boolean invokeCallbacks = false;
-    boolean throwConcurrentModification = false;
 
-    region.initialize(null, null, null);
-
-    region.virtualPut(event, ifNew, ifOld, expectedOldValue, requireOldValue, lastModified,
-        overwriteDestroyed, invokeCallbacks, throwConcurrentModification);
+    region.virtualPut(event, isOkToCreateEntry, isOkToUpdateEntry, null, requireOldValue,
+        lastModified, false, false, false);
 
     verify(dataStore)
-        .createLocally(same(bucketRegion), same(event), eq(ifNew), eq(ifOld), eq(requireOldValue),
-            eq(0L));
+        .createLocally(same(bucketRegion), same(event), eq(isOkToCreateEntry),
+            eq(isOkToUpdateEntry), eq(requireOldValue), eq(0L));
   }
 
   @Test
-  public void ifPRHasDataStore_putsLocally_ifNotIfNew()
+  public void ifPRHasDataStore_putsLocally_ifNotOkToCreateEntry()
       throws ForceReattemptException, ClassNotFoundException {
-    BucketRegion bucketRegion = mock(BucketRegion.class);
-    EntryEventImpl event = mock(EntryEventImpl.class);
+    Integer bucketId = 34;
+    String key = "put-event-key";
+    PartitionedRegion partitionedRegion = initializePartitionedRegion(true);
+    EntryEventImpl event = createEntryEvent(key, bucketId);
+    BucketRegion bucketRegion = createBucketForEntryEvent(event);
 
-    when(event.getKey())
-        .thenReturn("event-key");
-    when(event.getKeyInfo())
-        .thenReturn(mock(KeyInfo.class));
-
-    when(dataStore.getInitializedBucketForId(any(), any()))
-        .thenReturn(bucketRegion);
     when(dataStore.putLocally(
         same(bucketRegion), same(event), anyBoolean(), anyBoolean(), any(), anyBoolean(),
         anyLong()))
             .thenReturn(true);
 
-    boolean ifNew = false;
+    boolean isOkToCreateEntry = false;
     long lastModified = 9;
-    boolean ifOld = false;
+    boolean isOkToUpdateEntry = false;
     Object expectedOldValue = "expected old value";
     boolean requireOldValue = false;
-    boolean overwriteDestroyed = false;
-    boolean invokeCallbacks = false;
-    boolean throwConcurrentModification = false;
 
-    region.initialize(null, null, null);
-
-    region.virtualPut(event, ifNew, ifOld, expectedOldValue, requireOldValue, lastModified,
-        overwriteDestroyed, invokeCallbacks, throwConcurrentModification);
+    partitionedRegion.virtualPut(event, isOkToCreateEntry, isOkToUpdateEntry, expectedOldValue,
+        requireOldValue, lastModified, false, false, false);
 
     verify(dataStore)
-        .putLocally(same(bucketRegion), same(event), eq(ifNew), eq(ifOld), eq(expectedOldValue),
-            eq(requireOldValue), eq(lastModified));
+        .putLocally(same(bucketRegion), same(event), eq(isOkToCreateEntry), eq(isOkToUpdateEntry),
+            eq(expectedOldValue), eq(requireOldValue), eq(lastModified));
+  }
+
+  private BucketRegion createBucketForEntryEvent(EntryEventImpl entryEvent)
+      throws ForceReattemptException {
+    Object key = entryEvent.getKey();
+    int bucketId = entryEvent.getKeyInfo().getBucketId();
+    BucketRegion bucketRegion = mock(BucketRegion.class);
+    when(dataStore.getInitializedBucketForId(eq(key), eq(bucketId)))
+        .thenReturn(bucketRegion);
+    return bucketRegion;
+  }
+
+  private PartitionedRegion initializePartitionedRegion(boolean hasDataStore)
+      throws ClassNotFoundException {
+    PartitionAttributes<?, ?> partitionAttributes = new PartitionAttributesFactory<>()
+        .setLocalMaxMemory(hasDataStore ? 1 : 0)
+        .create();
+    AttributesFactory<?, ?> attributesFactory = new AttributesFactory<>();
+    attributesFactory.setPartitionAttributes(partitionAttributes);
+    PartitionedRegion partitionedRegion =
+        new PartitionedRegion("regionName", attributesFactory.create(), null, cache,
+            mock(InternalRegionArguments.class), disabledClock(),
+            mock(ColocationLoggerFactory.class),
+            regionAdvisorFactory, mock(InternalDataView.class), mock(Node.class), system,
+            partitionedRegionStatsFactory,
+            mock(SenderIdMonitorFactory.class), redundancyProviderFactory, dataStoreFactory);
+    partitionedRegion.initialize(null, null, null);
+    return partitionedRegion;
+  }
+
+  private static EntryEventImpl createEntryEvent(Object key, Integer bucketId) {
+    EntryEventImpl event = mock(EntryEventImpl.class);
+    KeyInfo keyInfo = mock(KeyInfo.class);
+    when(event.getKey())
+        .thenReturn(key);
+    when(event.getKeyInfo())
+        .thenReturn(keyInfo);
+    when(keyInfo.getBucketId())
+        .thenReturn(bucketId);
+    return event;
   }
 }
