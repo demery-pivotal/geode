@@ -62,6 +62,7 @@ import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
+import org.apache.geode.internal.cache.partitioned.DefaultPartitionMessageDistribution;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisorFactory;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
 
@@ -113,7 +114,8 @@ public class PartitionedRegionTest {
             regionAdvisorFactory, internalDataView, null /* Node */, system,
             partitionedRegionStatsFactory, senderIdMonitorFactory,
             pr -> new PRHARedundancyProvider(pr, cache.getInternalResourceManager()),
-            pr -> new PartitionedRegionDataStore(pr, disabledClock()));
+            pr -> new PartitionedRegionDataStore(pr, disabledClock()),
+            new DefaultPartitionMessageDistribution());
   }
 
   @Test

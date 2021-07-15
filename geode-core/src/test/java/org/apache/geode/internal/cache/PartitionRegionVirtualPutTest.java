@@ -25,6 +25,7 @@ import org.apache.geode.CancelCriterion;
 import org.apache.geode.cache.AttributesFactory;
 import org.apache.geode.cache.PartitionAttributes;
 import org.apache.geode.cache.PartitionAttributesFactory;
+import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.distributed.internal.DSClock;
 import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.DistributionManager;
@@ -32,6 +33,7 @@ import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.locks.DLockService;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
+import org.apache.geode.internal.cache.partitioned.PartitionMessageDistribution;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisorFactory;
 import org.apache.geode.internal.cache.partitioned.colocation.ColocationLoggerFactory;
@@ -45,11 +47,15 @@ public class PartitionRegionVirtualPutTest {
   @Mock
   PartitionedRegionDataStore dataStore;
   @Mock
+  PartitionMessageDistribution distribution;
+  @Mock
   RegionAdvisorFactory regionAdvisorFactory;
   @Mock
   PartitionedRegionDataStoreFactory dataStoreFactory;
   @Mock
   PartitionedRegionStatsFactory partitionedRegionStatsFactory;
+  @Mock
+  PartitionedRegionStats prStats;
   @Mock
   PRHARedundancyProviderFactory redundancyProviderFactory;
   @Mock
@@ -96,7 +102,7 @@ public class PartitionRegionVirtualPutTest {
         .thenReturn(true);
 
     when(partitionedRegionStatsFactory.create(any()))
-        .thenReturn(mock(PartitionedRegionStats.class));
+        .thenReturn(prStats);
 
     when(redundancyProvider.createBucketAtomically(anyInt(), anyInt(), anyBoolean(), any()))
         .thenReturn(distributedMember);
@@ -118,7 +124,7 @@ public class PartitionRegionVirtualPutTest {
   }
 
   @Test
-  public void ifPRHasDataStore_createsLocally_ifOkToCreateEntry()
+  public void withDataStore_createsLocally_ifOkToCreateEntry()
       throws ForceReattemptException, ClassNotFoundException {
     Integer bucketId = 12;
     String key = "create-event-key";
@@ -140,7 +146,7 @@ public class PartitionRegionVirtualPutTest {
   }
 
   @Test
-  public void ifPRHasDataStore_putsLocally_ifNotOkToCreateEntry()
+  public void withDataStore_putsLocally_ifNotOkToCreateEntry()
       throws ForceReattemptException, ClassNotFoundException {
     Integer bucketId = 34;
     String key = "put-event-key";
@@ -167,6 +173,28 @@ public class PartitionRegionVirtualPutTest {
             eq(expectedOldValue), eq(requireOldValue), eq(lastModified));
   }
 
+  @Test
+  public void withoutDataStore_createsRemotely_ifOkToCreateEntry()
+      throws ForceReattemptException, ClassNotFoundException {
+    Integer bucketId = 12;
+    String key = "create-event-key";
+    PartitionedRegion region = initializePartitionedRegion(false);
+    EntryEventImpl event = createEntryEvent(key, bucketId);
+    DistributedMember recipient = mock(DistributedMember.class);
+
+    boolean isOkToCreateEntry = true;
+    long lastModified = 9; // Ignored because isOkToCreateEntry == true
+    boolean isOkToUpdateEntry = false;
+    boolean requireOldValue = false;
+
+    region.virtualPut(event, isOkToCreateEntry, isOkToUpdateEntry, null, requireOldValue,
+        lastModified, false, false, false);
+
+    verify(distribution).createRemotely(
+        same(region), same(prStats), same(recipient), same(event), eq(requireOldValue));
+  }
+
+
   private BucketRegion createBucketForEntryEvent(EntryEventImpl entryEvent)
       throws ForceReattemptException {
     Object key = entryEvent.getKey();
@@ -190,7 +218,8 @@ public class PartitionRegionVirtualPutTest {
             mock(ColocationLoggerFactory.class),
             regionAdvisorFactory, mock(InternalDataView.class), mock(Node.class), system,
             partitionedRegionStatsFactory,
-            mock(SenderIdMonitorFactory.class), redundancyProviderFactory, dataStoreFactory);
+            mock(SenderIdMonitorFactory.class), redundancyProviderFactory, dataStoreFactory,
+            distribution);
     partitionedRegion.initialize(null, null, null);
     return partitionedRegion;
   }

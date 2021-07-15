@@ -182,6 +182,7 @@ import org.apache.geode.internal.cache.execute.ServerToClientFunctionResultSende
 import org.apache.geode.internal.cache.ha.ThreadIdentifier;
 import org.apache.geode.internal.cache.partitioned.ContainsKeyValueMessage;
 import org.apache.geode.internal.cache.partitioned.ContainsKeyValueMessage.ContainsKeyValueResponse;
+import org.apache.geode.internal.cache.partitioned.DefaultPartitionMessageDistribution;
 import org.apache.geode.internal.cache.partitioned.DestroyMessage;
 import org.apache.geode.internal.cache.partitioned.DestroyMessage.DestroyResponse;
 import org.apache.geode.internal.cache.partitioned.DumpAllPRConfigMessage;
@@ -213,6 +214,7 @@ import org.apache.geode.internal.cache.partitioned.PRSanityCheckMessage;
 import org.apache.geode.internal.cache.partitioned.PRUpdateEntryVersionMessage;
 import org.apache.geode.internal.cache.partitioned.PRUpdateEntryVersionMessage.UpdateEntryVersionResponse;
 import org.apache.geode.internal.cache.partitioned.PartitionMessage.PartitionResponse;
+import org.apache.geode.internal.cache.partitioned.PartitionMessageDistribution;
 import org.apache.geode.internal.cache.partitioned.PartitionedRegionObserver;
 import org.apache.geode.internal.cache.partitioned.PartitionedRegionObserverHolder;
 import org.apache.geode.internal.cache.partitioned.PutAllPRMessage;
@@ -451,6 +453,7 @@ public class PartitionedRegion extends LocalRegion
   private volatile int shutDownAllStatus = RUNNING_MODE;
 
   private final long birthTime = System.currentTimeMillis();
+  private final PartitionMessageDistribution distribution;
 
   public void setShutDownAllStatus(int newStatus) {
     this.shutDownAllStatus = newStatus;
@@ -803,7 +806,8 @@ public class PartitionedRegion extends LocalRegion
         SenderIdMonitor::createSenderIdMonitor,
         partitionedRegion -> new PRHARedundancyProvider(partitionedRegion,
             cache.getInternalResourceManager()),
-        partitionedRegion -> new PartitionedRegionDataStore(partitionedRegion, statisticsClock));
+        partitionedRegion -> new PartitionedRegionDataStore(partitionedRegion, statisticsClock),
+        new DefaultPartitionMessageDistribution());
   }
 
   public PartitionedRegion(
@@ -821,10 +825,12 @@ public class PartitionedRegion extends LocalRegion
       PartitionedRegionStatsFactory partitionedRegionStatsFactory,
       SenderIdMonitorFactory senderIdMonitorFactory,
       PRHARedundancyProviderFactory redundancyProviderFactory,
-      PartitionedRegionDataStoreFactory dataStoreFactory) {
+      PartitionedRegionDataStoreFactory dataStoreFactory,
+      PartitionMessageDistribution distribution) {
     super(regionName, regionAttributes, parentRegion, cache, internalRegionArgs,
         partitionedRegionDataView, statisticsClock);
 
+    this.distribution = distribution;
     this.dataStoreFactory = dataStoreFactory;
     this.colocationLoggerFactory = colocationLoggerFactory;
     this.node = node;
@@ -3049,7 +3055,8 @@ public class PartitionedRegion extends LocalRegion
           long start = this.prStats.startPutRemote();
           try {
             if (ifNew) {
-              result = createRemotely(currentTarget, bucketId, event, requireOldValue);
+              result = distribution.createRemotely(
+                  this, prStats, currentTarget, event, requireOldValue);
             } else {
               result = putRemotely(currentTarget, event, ifNew, ifOld, expectedOldValue,
                   requireOldValue);
