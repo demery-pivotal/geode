@@ -99,6 +99,9 @@ public class NestedFunctionExecutionDistributedTest implements Serializable {
     Properties properties = new Properties();
     properties.setProperty(ConfigurationProperties.SERIALIZABLE_OBJECT_FILTER,
         "org.apache.geode.internal.cache.execute.NestedFunctionExecutionDistributedTest*");
+    properties.setProperty(ConfigurationProperties.STATISTIC_SAMPLING_ENABLED, "true");
+    properties.setProperty(ConfigurationProperties.STATISTIC_ARCHIVE_FILE, "dhe-stats.gfs");
+
     cacheRule.createCache(properties);
     CacheServer cacheServer = cacheRule.getCache().addCacheServer();
     cacheServer.setPort(0);
